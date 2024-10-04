@@ -3,8 +3,8 @@
 // 1. EBUSY, ENFILE, EMFILE trigger retries and/or exponential backoff
 // 2. All non-directories are removed first and then all directories are
 //    removed in a second sweep.
-// 3. If we hit ENOTEMPTY in the second sweep, fall back to move-remove on
-//    the that folder.
+// 3. If we hit ENOTEMPTY or EPERM in the second sweep, fall back to
+//    move-remove on the that folder.
 //
 // Note: "move then remove" is 2-10 times slower, and just as unreliable.
 
@@ -38,7 +38,8 @@ const rimrafWindowsDirMoveRemoveFallback = async (
   try {
     return await rimrafWindowsDirRetry(path, options)
   } catch (er) {
-    if ((er as NodeJS.ErrnoException)?.code === 'ENOTEMPTY') {
+    const code = (er as NodeJS.ErrnoException)?.code
+    if (code === 'ENOTEMPTY') {
       return await rimrafMoveRemove(path, options)
     }
     throw er
@@ -57,8 +58,8 @@ const rimrafWindowsDirMoveRemoveFallbackSync = (
   try {
     return rimrafWindowsDirRetrySync(path, options)
   } catch (er) {
-    const fer = er as NodeJS.ErrnoException
-    if (fer?.code === 'ENOTEMPTY') {
+    const code = (er as NodeJS.ErrnoException)?.code
+    if (code === 'ENOTEMPTY') {
       return rimrafMoveRemoveSync(path, options)
     }
     throw er
@@ -76,7 +77,8 @@ export const rimrafWindows = async (path: string, opt: RimrafAsyncOptions) => {
   try {
     return await rimrafWindowsDir(path, opt, await lstat(path), START)
   } catch (er) {
-    if ((er as NodeJS.ErrnoException)?.code === 'ENOENT') return true
+    const code = (er as NodeJS.ErrnoException)?.code
+    if (code === 'ENOENT') return true
     throw er
   }
 }
@@ -88,7 +90,8 @@ export const rimrafWindowsSync = (path: string, opt: RimrafSyncOptions) => {
   try {
     return rimrafWindowsDirSync(path, opt, lstatSync(path), START)
   } catch (er) {
-    if ((er as NodeJS.ErrnoException)?.code === 'ENOENT') return true
+    const code = (er as NodeJS.ErrnoException)?.code
+    if (code === 'ENOENT') return true
     throw er
   }
 }
