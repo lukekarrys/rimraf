@@ -1,5 +1,5 @@
 import { mkdirSync, readdirSync } from 'fs'
-import { resolve } from 'path'
+import { resolve, sep } from 'path'
 import { glob } from 'glob'
 import t from 'tap'
 import { rimraf } from '../../src/index.js'
@@ -23,7 +23,10 @@ t.test('does not throw EPERM - async', async t => {
       await rimraf(resolve(dir, entry), { glob: false })
       entries.push(entry)
     }
-    t.strictSame(entries, ['a/b/c/nested.js', 'a/b/c', 'a/b', 'a'])
+    t.strictSame(
+      entries,
+      ['a/b/c/nested.js', 'a/b/c', 'a/b', 'a'].map(p => p.replaceAll('/', sep)),
+    )
 
     count += 1
   }
