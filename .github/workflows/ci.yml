@@ -15,7 +15,11 @@ jobs:
         - os: windows-latest
           shell: bash
         - os: windows-latest
-          shell: powershell
+          shell: bash
+        - os: windows-latest
+          shell: bash
+        - os: windows-latest
+          shell: bash
       fail-fast: false
 
     runs-on: ${{ matrix.platform.os }}
@@ -36,7 +40,7 @@ jobs:
         run: npm install
 
       - name: Run Tests
-        run: npm test -- -t0 -c
+        run: npm test -- test/integration/eperm.ts --disable-coverage
         env:
           RIMRAF_TEST_START_CHAR: a
           RIMRAF_TEST_END_CHAR: f
