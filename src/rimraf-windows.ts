@@ -39,7 +39,8 @@ const rimrafWindowsDirMoveRemoveFallback = async (
     return await rimrafWindowsDirRetry(path, options)
   } catch (er) {
     const code = (er as NodeJS.ErrnoException)?.code
-    if (code === 'ENOTEMPTY') {
+    if (code === 'ENOTEMPTY' || code === 'EPERM') {
+      console.trace(er)
       return await rimrafMoveRemove(path, options)
     }
     throw er
