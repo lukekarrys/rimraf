@@ -32,9 +32,9 @@ t.test('does not throw EPERM', async t => {
       console.error(e)
       throw e
     }
+    t.strictSame(readdirSync(cwd), [])
     t.strictSame(sortAlpha(del), expected)
     count += 1
   }
-  t.strictSame(readdirSync(cwd), [])
   t.equal(count, iterations)
 })

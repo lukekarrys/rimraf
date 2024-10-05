@@ -107,13 +107,16 @@ const rimrafWindowsDir = async (
   }
 
   const entries = ent.isDirectory() ? await readdirOrError(path) : null
-  console.trace({ entries })
   if (!Array.isArray(entries)) {
     // this can only happen if lstat/readdir lied, or if the dir was
     // swapped out with a file at just the right moment.
     /* c8 ignore start */
     if (entries) {
       if (entries.code === 'ENOENT') {
+        return true
+      }
+      if (entries.code === 'EPERM') {
+        console.trace(entries)
         return true
       }
       if (entries.code !== 'ENOTDIR') {
