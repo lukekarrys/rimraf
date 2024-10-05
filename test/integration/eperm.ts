@@ -26,12 +26,10 @@ t.test('does not throw EPERM', async t => {
   while (count !== iterations) {
     mkdirSync(join(cwd, nested), { recursive: true })
     const del = rando(globSync('**/*', { cwd }))
-    try {
-      await Promise.all(del.map(d => rimraf(join(cwd, d), { glob: false })))
-    } catch (e) {
-      console.error(e)
-      throw e
-    }
+    const res = await Promise.all(
+      del.map(d => rimraf(join(cwd, d), { glob: false })),
+    )
+    t.ok(res.every(Boolean))
     t.strictSame(readdirSync(cwd), [])
     t.strictSame(sortAlpha(del), expected)
     count += 1
