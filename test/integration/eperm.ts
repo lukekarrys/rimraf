@@ -1,5 +1,5 @@
 import { mkdirSync, readdirSync, realpathSync } from 'fs'
-import { resolve, sep, join } from 'path'
+import { sep, join } from 'path'
 import { glob } from 'glob'
 import t from 'tap'
 import os from 'node:os'
@@ -15,22 +15,18 @@ t.test('does not throw EPERM - async', async t => {
     realpathSync(os.tmpdir()),
     `_${randomBytes(6).toString('hex')}`,
   )
-  const nested = resolve(dir, 'a/b/c/nested.js')
+  const nested = join('a/b/c/d/e/f/g')
+  const expected = nested
+    .split(sep)
+    .reduce<string[]>((acc, d) => acc.concat(join(acc.at(-1) ?? '', d)), [])
   const totalAttempts = 200
 
   let count = 0
   while (count !== totalAttempts) {
-    mkdirSync(nested, { recursive: true })
-    const entries = []
-    const files = await glob('**/*', { cwd: dir, dot: true }).then(r =>
-      r.sort((a, b) => b.localeCompare(a)).map(p => resolve(dir, p)),
-    )
-    await Promise.all(files.map(f => rimraf(f, { glob: false })))
-    t.strictSame(
-      files,
-      ['a/b/c/nested.js', 'a/b/c', 'a/b', 'a'].map(p => resolve(dir, p)),
-    )
-
+    mkdirSync(join(dir, nested), { recursive: true })
+    const entries = await glob('**/*', { cwd: dir, dot: true })
+    await Promise.all(entries.map(e => rimraf(join(dir, e), { glob: false })))
+    t.strictSame(entries, expected)
     count += 1
   }
 
