@@ -132,16 +132,27 @@ const rimrafWindowsDir = async (
   }
 
   const s = state === START ? CHILD : state
-  const removedAll = (
-    await Promise.all(
-      entries.map(ent =>
-        rimrafWindowsDir(resolve(path, ent.name), opt, ent, s),
-      ),
-    )
-  ).reduce((a, b) => a && b, true)
+  let removedAll = false
+  try {
+    removedAll = (
+      await Promise.all(
+        entries.map(ent =>
+          rimrafWindowsDir(resolve(path, ent.name), opt, ent, s),
+        ),
+      )
+    ).reduce((a, b) => a && b, true)
+  } catch (e) {
+    console.trace(e)
+    throw e
+  }
 
   if (state === START) {
-    return rimrafWindowsDir(path, opt, ent, FINISH)
+    try {
+      return await rimrafWindowsDir(path, opt, ent, FINISH)
+    } catch (e) {
+      console.trace(e)
+      throw e
+    }
   } else if (state === FINISH) {
     if (opt.preserveRoot === false && path === parse(path).root) {
       return false
@@ -152,7 +163,12 @@ const rimrafWindowsDir = async (
     if (opt.filter && !(await opt.filter(path, ent))) {
       return false
     }
-    await ignoreENOENT(rimrafWindowsDirMoveRemoveFallback(path, opt))
+    try {
+      await ignoreENOENT(rimrafWindowsDirMoveRemoveFallback(path, opt))
+    } catch (e) {
+      console.trace(e)
+      throw e
+    }
   }
   return true
 }
