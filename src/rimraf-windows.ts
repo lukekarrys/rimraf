@@ -78,9 +78,6 @@ export const rimrafWindows = async (path: string, opt: RimrafAsyncOptions) => {
     return await rimrafWindowsDir(path, opt, await lstat(path), START)
   } catch (er) {
     const code = (er as NodeJS.ErrnoException)?.code
-    console.error(er)
-    console.error((er as NodeJS.ErrnoException).stack)
-    console.trace(code)
     if (code === 'ENOTEMPTY') return true
     throw er
   }
@@ -132,27 +129,16 @@ const rimrafWindowsDir = async (
   }
 
   const s = state === START ? CHILD : state
-  let removedAll = false
-  try {
-    removedAll = (
-      await Promise.all(
-        entries.map(ent =>
-          rimrafWindowsDir(resolve(path, ent.name), opt, ent, s),
-        ),
-      )
-    ).reduce((a, b) => a && b, true)
-  } catch (e) {
-    console.trace(e)
-    throw e
-  }
+  const removedAll = (
+    await Promise.all(
+      entries.map(ent =>
+        rimrafWindowsDir(resolve(path, ent.name), opt, ent, s),
+      ),
+    )
+  ).reduce((a, b) => a && b, true)
 
   if (state === START) {
-    try {
-      return await rimrafWindowsDir(path, opt, ent, FINISH)
-    } catch (e) {
-      console.trace(e)
-      throw e
-    }
+    return rimrafWindowsDir(path, opt, ent, FINISH)
   } else if (state === FINISH) {
     if (opt.preserveRoot === false && path === parse(path).root) {
       return false
@@ -163,12 +149,7 @@ const rimrafWindowsDir = async (
     if (opt.filter && !(await opt.filter(path, ent))) {
       return false
     }
-    try {
-      await ignoreENOENT(rimrafWindowsDirMoveRemoveFallback(path, opt))
-    } catch (e) {
-      console.trace(e)
-      throw e
-    }
+    await ignoreENOENT(rimrafWindowsDirMoveRemoveFallback(path, opt))
   }
   return true
 }
