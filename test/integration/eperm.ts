@@ -5,8 +5,7 @@ import { globSync } from 'glob'
 import { rimraf } from '../../src/index.js'
 
 // Copied from sindresorhus/del since it was reported in https://github.com/isaacs/rimraf/pull/314
-// that this test would throw EPERM errors consistently in Windows CI environments. I'm not sure
-// how much of the test structure is relevant to the error but I've copied it as closely as possible.
+// that this test would throw EPERM errors consistently in Windows CI environments.
 // https://github.com/sindresorhus/del/blob/chore/update-deps/test.js#L116
 t.test('does not throw EPERM - async', async t => {
   const iterations = 200
@@ -31,9 +30,9 @@ t.test('does not throw EPERM - async', async t => {
       del.sort((a, b) => a.localeCompare(b, 'en')),
       expected,
     )
+    t.strictSame(readdirSync(dir), [])
     count += 1
   }
 
-  t.strictSame(readdirSync(dir), [])
   t.equal(count, iterations)
 })
