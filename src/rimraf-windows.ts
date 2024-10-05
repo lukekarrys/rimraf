@@ -60,7 +60,8 @@ const rimrafWindowsDirMoveRemoveFallbackSync = (
     return rimrafWindowsDirRetrySync(path, options)
   } catch (er) {
     const code = (er as NodeJS.ErrnoException)?.code
-    if (code === 'ENOTEMPTY') {
+    console.trace(code)
+    if (code === 'ENOTEMPTY' || code === 'EPERM') {
       return rimrafMoveRemoveSync(path, options)
     }
     throw er
