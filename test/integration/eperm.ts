@@ -14,7 +14,7 @@ const letters = (d: number) =>
 // that this test would throw EPERM errors consistently in Windows CI environments.
 // https://github.com/sindresorhus/del/blob/chore/update-deps/test.js#L116
 t.test('windows does not throw EPERM', async t => {
-  const iterations = 200
+  const iterations = 1000
   const dirDepth = 7
   const fileCount = 10
   const fileSizeMb = 0.1
