@@ -1,15 +1,20 @@
-import { mkdirSync, readdirSync } from 'fs'
-import { resolve, sep } from 'path'
+import { mkdirSync, readdirSync, realpathSync } from 'fs'
+import { resolve, sep, join } from 'path'
 import { glob } from 'glob'
 import t from 'tap'
+import os from 'node:os'
 import { rimraf } from '../../src/index.js'
+import { randomBytes } from 'crypto'
 
 // Copied from sindresorhus/del since it was reported in https://github.com/isaacs/rimraf/pull/314
 // that this test would throw EPERM errors consistently in Windows CI environments. I'm not sure
 // how much of the test structure is relevant to the error but I've copied it as closely as possible.
 // https://github.com/sindresorhus/del/blob/chore/update-deps/test.js#L116
 t.test('does not throw EPERM - async', async t => {
-  const dir = t.testdir()
+  const dir = join(
+    realpathSync(os.tmpdir()),
+    `_${randomBytes(6).toString('hex')}`,
+  )
   const nested = resolve(dir, 'a/b/c/nested.js')
   const totalAttempts = 200
 
@@ -17,15 +22,13 @@ t.test('does not throw EPERM - async', async t => {
   while (count !== totalAttempts) {
     mkdirSync(nested, { recursive: true })
     const entries = []
-    for (const entry of await glob('**/*', { cwd: dir, dot: true }).then(r =>
-      r.sort((a, b) => b.localeCompare(a)),
-    )) {
-      await rimraf(resolve(dir, entry), { glob: false })
-      entries.push(entry)
-    }
+    const files = await glob('**/*', { cwd: dir, dot: true }).then(r =>
+      r.sort((a, b) => b.localeCompare(a)).map(p => resolve(dir, p)),
+    )
+    await Promise.all(files.map(f => rimraf(f, { glob: false })))
     t.strictSame(
-      entries,
-      ['a/b/c/nested.js', 'a/b/c', 'a/b', 'a'].map(p => p.replaceAll('/', sep)),
+      files,
+      ['a/b/c/nested.js', 'a/b/c', 'a/b', 'a'].map(p => resolve(dir, p)),
     )
 
     count += 1
