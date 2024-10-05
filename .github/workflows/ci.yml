@@ -1,13 +1,12 @@
 name: CI
 
-on: [pull_request]
+on: [push, pull_request]
 
 jobs:
   build:
     strategy:
       matrix:
-        node-version: [22.x]
-        # node-version: [20.x, 22.x]
+        node-version: [20.x, 22.x]
         platform:
         # - os: ubuntu-latest
         #   shell: bash
@@ -15,8 +14,8 @@ jobs:
         #   shell: bash
         - os: windows-latest
           shell: bash
-        # - os: windows-latest
-        #   shell: powershell
+        - os: windows-latest
+          shell: powershell
       fail-fast: false
 
     runs-on: ${{ matrix.platform.os }}
