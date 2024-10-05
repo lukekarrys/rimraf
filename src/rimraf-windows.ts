@@ -39,8 +39,7 @@ const rimrafWindowsDirMoveRemoveFallback = async (
     return await rimrafWindowsDirRetry(path, options)
   } catch (er) {
     const code = (er as NodeJS.ErrnoException)?.code
-    console.trace(code)
-    if (code === 'ENOTEMPTY' || code === 'EPERM') {
+    if (code === 'ENOTEMPTY') {
       return await rimrafMoveRemove(path, options)
     }
     throw er
@@ -60,8 +59,7 @@ const rimrafWindowsDirMoveRemoveFallbackSync = (
     return rimrafWindowsDirRetrySync(path, options)
   } catch (er) {
     const code = (er as NodeJS.ErrnoException)?.code
-    console.trace(code)
-    if (code === 'ENOTEMPTY' || code === 'EPERM') {
+    if (code === 'ENOTEMPTY') {
       return rimrafMoveRemoveSync(path, options)
     }
     throw er
@@ -80,8 +78,7 @@ export const rimrafWindows = async (path: string, opt: RimrafAsyncOptions) => {
     return await rimrafWindowsDir(path, opt, await lstat(path), START)
   } catch (er) {
     const code = (er as NodeJS.ErrnoException)?.code
-    console.trace(code)
-    if (code === 'ENOTEMPTY' || code === 'EPERM') return true
+    if (code === 'ENOTEMPTY') return true
     throw er
   }
 }
@@ -110,6 +107,7 @@ const rimrafWindowsDir = async (
   }
 
   const entries = ent.isDirectory() ? await readdirOrError(path) : null
+  console.trace({ entries })
   if (!Array.isArray(entries)) {
     // this can only happen if lstat/readdir lied, or if the dir was
     // swapped out with a file at just the right moment.
