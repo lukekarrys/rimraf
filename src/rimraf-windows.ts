@@ -112,9 +112,12 @@ const rimrafWindowsDir = async (
     // swapped out with a file at just the right moment.
     /* c8 ignore start */
     if (entries) {
-      console.trace(entries)
       if (entries.code === 'ENOENT') {
         return true
+      }
+      if (entries.code === 'EPERM') {
+        console.trace(entries)
+        return ignoreENOENT(rimrafWindowsDirMoveRemoveFallback(path, opt))
       }
       if (entries.code !== 'ENOTDIR') {
         throw entries

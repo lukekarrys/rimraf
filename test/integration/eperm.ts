@@ -2,7 +2,7 @@ import t from 'tap'
 import { mkdirSync, readdirSync, writeFileSync } from 'fs'
 import { sep, join } from 'path'
 import { globSync } from 'glob'
-import { rimraf } from '../../src/index.js'
+import { windows } from '../../src/index.js'
 import { randomBytes } from 'crypto'
 
 const sort = (arr: string[]) =>
@@ -13,7 +13,7 @@ const letters = (d: number) =>
 // Copied from sindresorhus/del since it was reported in https://github.com/isaacs/rimraf/pull/314
 // that this test would throw EPERM errors consistently in Windows CI environments.
 // https://github.com/sindresorhus/del/blob/chore/update-deps/test.js#L116
-t.test('does not throw EPERM', async t => {
+t.test('windows does not throw EPERM', async t => {
   const iterations = 200
   const dirDepth = 7
   const fileCount = 10
@@ -39,7 +39,7 @@ t.test('does not throw EPERM', async t => {
     const del = globSync('**/*', { cwd }).sort(() => 0.5 - Math.random())
     t.strictSame(sort(del), expected)
     t.strictSame(
-      await Promise.all(del.map(d => rimraf(join(cwd, d), { glob: false }))),
+      await Promise.all(del.map(d => windows(join(cwd, d), { glob: false }))),
       new Array(del.length).fill(true),
     )
 
