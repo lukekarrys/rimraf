@@ -11,10 +11,10 @@ const sortAlpha = (arr: string[]) =>
 // Copied from sindresorhus/del since it was reported in https://github.com/isaacs/rimraf/pull/314
 // that this test would throw EPERM errors consistently in Windows CI environments.
 // https://github.com/sindresorhus/del/blob/chore/update-deps/test.js#L116
-t.test('does not throw EPERM - async', async t => {
+t.test('does not throw EPERM', async t => {
   const iterations = 200
   const depth = 7
-  const dir = t.testdir()
+  const cwd = t.testdir()
   const nested = join(
     ...new Array(depth).fill(0).map((_, i) => (10 + i).toString(36)),
   )
@@ -24,12 +24,12 @@ t.test('does not throw EPERM - async', async t => {
 
   let count = 0
   while (count !== iterations) {
-    mkdirSync(join(dir, nested), { recursive: true })
-    const del = rando(globSync('**/*', { cwd: dir }))
-    await Promise.all(del.map(d => rimraf(join(dir, d))))
+    mkdirSync(join(cwd, nested), { recursive: true })
+    const del = rando(globSync('**/*', { cwd }))
+    await Promise.all(del.map(d => rimraf(join(cwd, d), { glob: false })))
     t.strictSame(sortAlpha(del), expected)
-    t.strictSame(readdirSync(dir), [])
     count += 1
   }
+  t.strictSame(readdirSync(cwd), [])
   t.equal(count, iterations)
 })
