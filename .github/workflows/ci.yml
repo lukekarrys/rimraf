@@ -1,6 +1,6 @@
 name: CI
 
-on: [pull_request]
+on: [push, pull_request]
 
 jobs:
   build:
@@ -14,12 +14,8 @@ jobs:
         #   shell: bash
         - os: windows-latest
           shell: bash
-        - os: windows-latest
-          shell: bash
-        - os: windows-latest
-          shell: bash
-        - os: windows-latest
-          shell: bash
+        # - os: windows-latest
+        #   shell: powershell
       fail-fast: false
 
     runs-on: ${{ matrix.platform.os }}
@@ -40,8 +36,17 @@ jobs:
         run: npm install
 
       - name: Run Tests
-        run: npm test -- test/integration/eperm.ts --disable-coverage
+        run: npm test -- -t0 -c
         env:
           RIMRAF_TEST_START_CHAR: a
           RIMRAF_TEST_END_CHAR: f
           RIMRAF_TEST_DEPTH: 5
+
+      - run: npm test -- -t0 -c
+      - run: npm test -- -t0 -c
+      - run: npm test -- -t0 -c
+      - run: npm test -- -t0 -c
+      - run: npm test -- -t0 -c
+      - run: npm test -- -t0 -c
+      - run: npm test -- -t0 -c
+      - run: npm test -- -t0 -c
