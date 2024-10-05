@@ -78,6 +78,8 @@ export const rimrafWindows = async (path: string, opt: RimrafAsyncOptions) => {
     return await rimrafWindowsDir(path, opt, await lstat(path), START)
   } catch (er) {
     const code = (er as NodeJS.ErrnoException)?.code
+    console.error(er)
+    console.error((er as NodeJS.ErrnoException).stack)
     console.trace(code)
     if (code === 'ENOTEMPTY') return true
     throw er
