@@ -33,7 +33,6 @@ const setup = (
     .reduce<string[]>((acc, d) => acc.concat(join(acc.at(-1) ?? '', d)), [])
   const entries = dirs.flatMap(d => [d, ...files.map(f => join(d, f))])
 
-  t.plan(2)
   const cwd = t.testdir()
   let iteration = 0
 
@@ -82,8 +81,7 @@ const setup = (
         yield [matches.map(m => join(cwd, m)), RunError] as const
       }
 
-      t.equal(iteration, iterations, 'ran all iterations')
-      t.strictSame(globSync('**/*', { cwd }), [], 'no more files')
+      return [iteration, iterations] as const
     },
   ] as const
 }
@@ -109,18 +107,27 @@ t.test('windows does not throw EPERM', async t => {
       },
   )
 
-  for (const [matches, RunError] of run()) {
-    const result = await Promise.all(
-      matches.map(path =>
-        windows(path)
-          .then(deleted => ({ path, deleted }))
-          .catch(error => {
-            throw new RunError(`rimraf.windows error`, { error, path })
-          }),
-      ),
-    )
+  let i
+  const r = run()
+  while ((i = r.next())) {
+    if (i.done) {
+      i = i.value
+      break
+    }
 
-    const notDeleted = result.filter(({ deleted }) => deleted !== true)
+    const [matches, RunError] = i.value
+
+    const notDeleted = (
+      await Promise.all(
+        matches.map(path =>
+          windows(path)
+            .then(deleted => ({ path, deleted }))
+            .catch(error => {
+              throw new RunError(`rimraf.windows error`, { error, path })
+            }),
+        ),
+      )
+    ).filter(({ deleted }) => deleted !== true)
     assert(
       !notDeleted.length,
       new RunError(`some entries were not deleted`, {
@@ -128,6 +135,14 @@ t.test('windows does not throw EPERM', async t => {
       }),
     )
 
-    assert(!readdirSync(cwd).length, new RunError(`dir is not empty`))
+    const actual = readdirSync(cwd)
+    assert(
+      !actual.length,
+      new RunError(`dir is not empty`, {
+        actual,
+      }),
+    )
   }
+
+  t.equal(i[0], i[1], `ran all ${i[1]} iterations`)
 })

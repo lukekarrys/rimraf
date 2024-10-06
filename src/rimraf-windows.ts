@@ -40,7 +40,6 @@ const rimrafWindowsDirMoveRemoveFallback = async (
   } catch (er) {
     const code = (er as NodeJS.ErrnoException)?.code
     if (code === 'ENOTEMPTY' || code === 'EPERM') {
-      console.trace(er)
       return await rimrafMoveRemove(path, options)
     }
     throw er
@@ -60,7 +59,7 @@ const rimrafWindowsDirMoveRemoveFallbackSync = (
     return rimrafWindowsDirRetrySync(path, options)
   } catch (er) {
     const code = (er as NodeJS.ErrnoException)?.code
-    if (code === 'ENOTEMPTY') {
+    if (code === 'ENOTEMPTY' || code === 'EPERM') {
       return rimrafMoveRemoveSync(path, options)
     }
     throw er
@@ -78,8 +77,7 @@ export const rimrafWindows = async (path: string, opt: RimrafAsyncOptions) => {
   try {
     return await rimrafWindowsDir(path, opt, await lstat(path), START)
   } catch (er) {
-    const code = (er as NodeJS.ErrnoException)?.code
-    if (code === 'ENOTEMPTY') return true
+    if ((er as NodeJS.ErrnoException)?.code === 'ENOTEMPTY') return true
     throw er
   }
 }
@@ -91,8 +89,7 @@ export const rimrafWindowsSync = (path: string, opt: RimrafSyncOptions) => {
   try {
     return rimrafWindowsDirSync(path, opt, lstatSync(path), START)
   } catch (er) {
-    const code = (er as NodeJS.ErrnoException)?.code
-    if (code === 'ENOENT') return true
+    if ((er as NodeJS.ErrnoException)?.code === 'ENOENT') return true
     throw er
   }
 }
@@ -117,8 +114,8 @@ const rimrafWindowsDir = async (
         return true
       }
       if (entries.code === 'EPERM') {
-        console.trace(entries)
-        return ignoreENOENT(rimrafWindowsDirMoveRemoveFallback(path, opt))
+        await ignoreENOENT(rimrafWindowsDirMoveRemoveFallback(path, opt))
+        return true
       }
       if (entries.code !== 'ENOTDIR') {
         throw entries
