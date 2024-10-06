@@ -46,11 +46,11 @@ const setup = (
         // use custom error to throw instead of using tap assertions to cut down on output
         // when running many iterations
         class RunError extends Error {
-          constructor(message: string, c?: Error | Record<string, unknown>) {
+          constructor(message: string, c?: Record<string, unknown>) {
             super(message, {
               cause: {
                 iteration,
-                ...(c instanceof Error ? { error: c } : c),
+                ...c,
               },
             })
           }
@@ -79,7 +79,7 @@ const setup = (
           }),
         )
 
-        yield [matches, RunError] as const
+        yield [matches.map(m => join(cwd, m)), RunError] as const
       }
 
       t.equal(iteration, iterations, 'ran all iterations')
@@ -111,14 +111,16 @@ t.test('windows does not throw EPERM', async t => {
 
   for (const [matches, RunError] of run()) {
     const result = await Promise.all(
-      matches.map(d =>
-        windows(join(cwd, d), { glob: false }).then(r => [d, r] as const),
+      matches.map(path =>
+        windows(path)
+          .then(deleted => ({ path, deleted }))
+          .catch(error => {
+            throw new RunError(`rimraf.windows error`, { error, path })
+          }),
       ),
-    ).catch(e => {
-      throw new RunError(`rimraf.windows error`, e)
-    })
+    )
 
-    const notDeleted = result.filter(([, v]) => v !== true)
+    const notDeleted = result.filter(({ deleted }) => deleted !== true)
     assert(
       !notDeleted.length,
       new RunError(`some entries were not deleted`, {
