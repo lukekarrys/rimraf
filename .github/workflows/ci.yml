@@ -36,21 +36,21 @@ jobs:
         run: npm install
 
       - name: Run Tests
-        run: npm test -- test/integration/eperm.ts --disable-coverage
-      - run: npm test -- test/integration/eperm.ts --disable-coverage
-      - run: npm test -- test/integration/eperm.ts --disable-coverage
-      - run: npm test -- test/integration/eperm.ts --disable-coverage
-      - run: npm test -- test/integration/eperm.ts --disable-coverage
-      - run: npm test -- test/integration/eperm.ts --disable-coverage
-      - run: npm test -- test/integration/eperm.ts --disable-coverage
-      - run: npm test -- test/integration/eperm.ts --disable-coverage
-      - run: npm test -- test/integration/eperm.ts --disable-coverage
-      - run: npm test -- test/integration/eperm.ts --disable-coverage
-      - run: npm test -- test/integration/eperm.ts --disable-coverage
-      - run: npm test -- test/integration/eperm.ts --disable-coverage
-      - run: npm test -- test/integration/eperm.ts --disable-coverage
-      - run: npm test -- test/integration/eperm.ts --disable-coverage
-      - run: npm test -- test/integration/eperm.ts --disable-coverage
-      - run: npm test -- test/integration/eperm.ts --disable-coverage
-      - run: npm test -- test/integration/eperm.ts --disable-coverage
-      - run: npm test -- test/integration/eperm.ts --disable-coverage
+        run: npm test -- test/integration/eperm.ts --disable-coverage --grep=. --grep=async
+      - run: npm test -- test/integration/eperm.ts --disable-coverage --grep=. --grep=async
+      - run: npm test -- test/integration/eperm.ts --disable-coverage --grep=. --grep=async
+      - run: npm test -- test/integration/eperm.ts --disable-coverage --grep=. --grep=async
+      - run: npm test -- test/integration/eperm.ts --disable-coverage --grep=. --grep=async
+      - run: npm test -- test/integration/eperm.ts --disable-coverage --grep=. --grep=async
+      - run: npm test -- test/integration/eperm.ts --disable-coverage --grep=. --grep=async
+      - run: npm test -- test/integration/eperm.ts --disable-coverage --grep=. --grep=async
+      - run: npm test -- test/integration/eperm.ts --disable-coverage --grep=. --grep=async
+      - run: npm test -- test/integration/eperm.ts --disable-coverage --grep=. --grep=async
+      - run: npm test -- test/integration/eperm.ts --disable-coverage --grep=. --grep=async
+      - run: npm test -- test/integration/eperm.ts --disable-coverage --grep=. --grep=async
+      - run: npm test -- test/integration/eperm.ts --disable-coverage --grep=. --grep=async
+      - run: npm test -- test/integration/eperm.ts --disable-coverage --grep=. --grep=async
+      - run: npm test -- test/integration/eperm.ts --disable-coverage --grep=. --grep=async
+      - run: npm test -- test/integration/eperm.ts --disable-coverage --grep=. --grep=async
+      - run: npm test -- test/integration/eperm.ts --disable-coverage --grep=. --grep=async
+      - run: npm test -- test/integration/eperm.ts --disable-coverage --grep=. --grep=async

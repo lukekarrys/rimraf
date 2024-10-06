@@ -126,7 +126,14 @@ const rimrafWindowsDir = async (
       return false
     }
     // is a file
-    await ignoreENOENT(rimrafWindowsFile(path, opt))
+    try {
+      await ignoreENOENT(rimrafWindowsFile(path, opt))
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException)?.code === 'EPERM') {
+        console.trace(err)
+      }
+      throw err
+    }
     return true
   }
 
