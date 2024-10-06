@@ -25,28 +25,36 @@ const setup = (
     fileKb: number
   },
 ) => {
-  const cwd = t.testdir()
-
   const letters = (length: number) =>
     Array.from({ length }).map((_, i) => (10 + i).toString(36))
-
-  const deepestDir = join(...letters(depth))
   const files = letters(fileCount).map(f => `file_${f}`)
-
-  const dirs = deepestDir
+  const dirs = join(...letters(depth))
     .split(sep)
     .reduce<string[]>((acc, d) => acc.concat(join(acc.at(-1) ?? '', d)), [])
-
-  const expected = dirs.flatMap(d => [d, ...files.map(f => join(d, f))])
+  const entries = dirs.flatMap(d => [d, ...files.map(f => join(d, f))])
 
   t.plan(2)
-  let count = 0
+  const cwd = t.testdir()
+  let iteration = 0
 
   return [
-    { cwd, expected },
+    cwd,
     function* () {
-      while (count !== iterations) {
-        count += 1
+      while (iteration !== iterations) {
+        iteration += 1
+
+        // use custom error to throw instead of using tap assertions to cut down on output
+        // when running many iterations
+        class RunError extends Error {
+          constructor(message: string, c?: Error | Record<string, unknown>) {
+            super(message, {
+              cause: {
+                iteration,
+                ...(c instanceof Error ? { error: c } : c),
+              },
+            })
+          }
+        }
 
         mkdirSync(join(cwd, dirs.at(-1)!), { recursive: true })
         for (const dir of dirs) {
@@ -55,30 +63,26 @@ const setup = (
           }
         }
 
-        // use custom error to throw instead of using tap assertions to cut down on output
-        // when running many iterations
-        class RunError extends Error {
-          constructor(message: string, c?: Error | Record<string, unknown>) {
-            super(message, {
-              cause: {
-                count,
-                ...(c instanceof Error ? { error: c } : c),
-              },
-            })
-          }
-        }
+        // randomize results from glob so that when running Promise.all(rimraf)
+        // on the result it will potentially delete parent directories before
+        // child directories and their files. This seems to make EPERM errors
+        // more likely on Windows.
+        const matches = globSync('**/*', { cwd }).sort(
+          () => 0.5 - Math.random(),
+        )
 
-        yield [
-          // randomize results from glob so that when running Promise.all(rimraf)
-          // on the result it will potentially delete parent directories before
-          // child directories and their files. This seems to make EPERM errors
-          // more likely on Windows.
-          globSync('**/*', { cwd }).sort(() => 0.5 - Math.random()),
-          RunError,
-        ] as const
+        assert(
+          arrSame(matches, entries),
+          new RunError(`glob result does not match expected`, {
+            found: matches,
+            wanted: entries,
+          }),
+        )
+
+        yield [matches, RunError] as const
       }
 
-      t.equal(count, iterations, 'ran all iterations')
+      t.equal(iteration, iterations, 'ran all iterations')
       t.strictSame(globSync('**/*', { cwd }), [], 'no more files')
     },
   ] as const
@@ -88,7 +92,7 @@ const setup = (
 // that this test would throw EPERM errors consistently in Windows CI environments.
 // https://github.com/sindresorhus/del/blob/chore/update-deps/test.js#L116
 t.test('windows does not throw EPERM', async t => {
-  const [{ cwd, expected }, run] = setup(
+  const [cwd, run] = setup(
     t,
     process.env.CI ?
       {
@@ -106,14 +110,6 @@ t.test('windows does not throw EPERM', async t => {
   )
 
   for (const [matches, RunError] of run()) {
-    assert(
-      arrSame(matches, expected),
-      new RunError(`glob result is not expected`, {
-        found: matches,
-        wanted: expected,
-      }),
-    )
-
     const result = await Promise.all(
       matches.map(d =>
         windows(join(cwd, d), { glob: false }).then(r => [d, r] as const),
@@ -122,10 +118,11 @@ t.test('windows does not throw EPERM', async t => {
       throw new RunError(`rimraf.windows error`, e)
     })
 
+    const notDeleted = result.filter(([, v]) => v !== true)
     assert(
-      result.every(([, v]) => v === true),
+      !notDeleted.length,
       new RunError(`some entries were not deleted`, {
-        found: result,
+        found: notDeleted,
       }),
     )
 
