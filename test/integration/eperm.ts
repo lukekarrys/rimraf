@@ -2,7 +2,7 @@ import t, { Test } from 'tap'
 import { mkdirSync, readdirSync, writeFileSync } from 'fs'
 import { sep, join } from 'path'
 import { globSync } from 'glob'
-import { windows } from '../../src/index.js'
+import { windows, windowsSync } from '../../src/index.js'
 import { randomBytes } from 'crypto'
 import assert from 'assert'
 
@@ -25,35 +25,44 @@ const setup = (
     fileKb: number
   },
 ) => {
+  const cwd = t.testdir()
+
   const letters = (length: number) =>
     Array.from({ length }).map((_, i) => (10 + i).toString(36))
   const files = letters(fileCount).map(f => `file_${f}`)
   const dirs = join(...letters(depth))
     .split(sep)
     .reduce<string[]>((acc, d) => acc.concat(join(acc.at(-1) ?? '', d)), [])
-  const entries = dirs.flatMap(d => [d, ...files.map(f => join(d, f))])
+  const entries = dirs
+    .flatMap(d => [d, ...files.map(f => join(d, f))])
+    .map(d => join(cwd, d))
 
-  const cwd = t.testdir()
   let iteration = 0
-
   return [
     cwd,
     function* () {
       while (iteration !== iterations) {
-        iteration += 1
-
-        // use custom error to throw instead of using tap assertions to cut down on output
-        // when running many iterations
+        // use custom error to throw instead of using tap assertions to cut down
+        // on output when running many iterations
         class RunError extends Error {
           constructor(message: string, c?: Record<string, unknown>) {
             super(message, {
               cause: {
+                testName: t.name,
                 iteration,
                 ...c,
               },
             })
           }
         }
+
+        const actual = readdirSync(cwd)
+        assert(
+          !actual.length,
+          new RunError(`dir is not empty`, {
+            found: actual,
+          }),
+        )
 
         mkdirSync(join(cwd, dirs.at(-1)!), { recursive: true })
         for (const dir of dirs) {
@@ -66,9 +75,9 @@ const setup = (
         // on the result it will potentially delete parent directories before
         // child directories and their files. This seems to make EPERM errors
         // more likely on Windows.
-        const matches = globSync('**/*', { cwd }).sort(
-          () => 0.5 - Math.random(),
-        )
+        const matches = globSync('**/*', { cwd })
+          .sort(() => 0.5 - Math.random())
+          .map(m => join(cwd, m))
 
         assert(
           arrSame(matches, entries),
@@ -78,7 +87,9 @@ const setup = (
           }),
         )
 
-        yield [matches.map(m => join(cwd, m)), RunError] as const
+        iteration += 1
+
+        yield [matches, RunError] as const
       }
 
       return [iteration, iterations] as const
@@ -86,12 +97,12 @@ const setup = (
   ] as const
 }
 
-// Copied from sindresorhus/del since it was reported in https://github.com/isaacs/rimraf/pull/314
-// that this test would throw EPERM errors consistently in Windows CI environments.
+// Copied from sindresorhus/del since it was reported in
+// https://github.com/isaacs/rimraf/pull/314 that this test would throw EPERM
+// errors consistently in Windows CI environments.
 // https://github.com/sindresorhus/del/blob/chore/update-deps/test.js#L116
-t.test('windows does not throw EPERM', async t => {
-  const [cwd, run] = setup(
-    t,
+t.test('windows does not throw EPERM', t => {
+  const options =
     process.env.CI ?
       {
         iterations: 1000,
@@ -104,45 +115,92 @@ t.test('windows does not throw EPERM', async t => {
         depth: 8,
         files: 3,
         fileKb: 10,
-      },
-  )
+      }
 
-  let i
-  const r = run()
-  while ((i = r.next())) {
-    if (i.done) {
-      i = i.value
-      break
+  t.test('sync', t => {
+    const [cwd, run] = setup(t, options)
+
+    let i
+    const r = run()
+    while ((i = r.next())) {
+      if (i.done) {
+        i = i.value
+        break
+      }
+
+      const [matches, RunError] = i.value
+      const result = matches
+        .map(path => {
+          try {
+            return {
+              path,
+              deleted: windowsSync(path),
+            }
+          } catch (error) {
+            throw new RunError('rimraf error', { error, path })
+          }
+        })
+        .filter(({ deleted }) => deleted !== true)
+      assert(
+        !result.length,
+        new RunError(`some entries were not deleted`, {
+          found: result,
+        }),
+      )
     }
 
-    const [matches, RunError] = i.value
+    t.strictSame(readdirSync(cwd), [])
+    t.equal(i[0], i[1], `ran all ${i[1]} iterations`)
+    t.end()
+  })
 
-    const notDeleted = (
-      await Promise.all(
-        matches.map(path =>
-          windows(path)
-            .then(deleted => ({ path, deleted }))
-            .catch(error => {
-              throw new RunError(`rimraf.windows error`, { error, path })
-            }),
-        ),
+  t.test('async', async t => {
+    const [cwd, run] = setup(
+      t,
+      process.env.CI ?
+        {
+          iterations: 1000,
+          depth: 15,
+          files: 7,
+          fileKb: 100,
+        }
+      : {
+          iterations: 200,
+          depth: 8,
+          files: 3,
+          fileKb: 10,
+        },
+    )
+
+    let i
+    const r = run()
+    while ((i = r.next())) {
+      if (i.done) {
+        i = i.value
+        break
+      }
+
+      const [matches, RunError] = i.value
+      const result = (
+        await Promise.all(
+          matches.map(path =>
+            windows(path)
+              .then(deleted => ({ path, deleted }))
+              .catch(error => {
+                throw new RunError('rimraf error', { error, path })
+              }),
+          ),
+        )
+      ).filter(({ deleted }) => deleted !== true)
+      assert(
+        !result.length,
+        new RunError(`some entries were not deleted`, {
+          found: result,
+        }),
       )
-    ).filter(({ deleted }) => deleted !== true)
-    assert(
-      !notDeleted.length,
-      new RunError(`some entries were not deleted`, {
-        found: notDeleted,
-      }),
-    )
+    }
 
-    const actual = readdirSync(cwd)
-    assert(
-      !actual.length,
-      new RunError(`dir is not empty`, {
-        actual,
-      }),
-    )
-  }
-
-  t.equal(i[0], i[1], `ran all ${i[1]} iterations`)
+    t.strictSame(readdirSync(cwd), [])
+    t.equal(i[0], i[1], `ran all ${i[1]} iterations`)
+  })
 })

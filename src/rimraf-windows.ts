@@ -77,7 +77,7 @@ export const rimrafWindows = async (path: string, opt: RimrafAsyncOptions) => {
   try {
     return await rimrafWindowsDir(path, opt, await lstat(path), START)
   } catch (er) {
-    if ((er as NodeJS.ErrnoException)?.code === 'ENOTEMPTY') return true
+    if ((er as NodeJS.ErrnoException)?.code === 'ENOENT') return true
     throw er
   }
 }
@@ -169,6 +169,12 @@ const rimrafWindowsDirSync = (
     /* c8 ignore start */
     if (entries) {
       if (entries.code === 'ENOENT') {
+        return true
+      }
+      if (entries.code === 'EPERM') {
+        ignoreENOENTSync(() => {
+          rimrafWindowsDirMoveRemoveFallbackSync(path, opt)
+        })
         return true
       }
       if (entries.code !== 'ENOTDIR') {
