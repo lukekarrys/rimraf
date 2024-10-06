@@ -25,7 +25,6 @@ const setup = (
     fileKb: number
   },
 ) => {
-  let count = 0
   const cwd = t.testdir()
 
   const letters = (length: number) =>
@@ -40,84 +39,96 @@ const setup = (
 
   const expected = dirs.flatMap(d => [d, ...files.map(f => join(d, f))])
 
-  return {
-    next: () => {
-      if (count === iterations) {
-        return false
-      }
-      count += 1
-      return true
-    },
-    cwd,
-    expected,
-    writeFixtures: () => {
-      mkdirSync(join(cwd, dirs.at(-1)!), { recursive: true })
-      for (const dir of dirs) {
-        for (const f of files) {
-          writeFileSync(join(cwd, dir, f), randomBytes(1024 * fileKb))
+  t.plan(2)
+  let count = 0
+
+  return [
+    { cwd, expected },
+    function* () {
+      while (count !== iterations) {
+        count += 1
+
+        mkdirSync(join(cwd, dirs.at(-1)!), { recursive: true })
+        for (const dir of dirs) {
+          for (const f of files) {
+            writeFileSync(join(cwd, dir, f), randomBytes(1024 * fileKb))
+          }
         }
+
+        // use custom error to throw instead of using tap assertions to cut down on output
+        // when running many iterations
+        class RunError extends Error {
+          constructor(message: string, c?: Error | Record<string, unknown>) {
+            super(message, {
+              cause: {
+                count,
+                ...(c instanceof Error ? { error: c } : c),
+              },
+            })
+          }
+        }
+
+        yield [
+          // randomize results from glob so that when running Promise.all(rimraf)
+          // on the result it will potentially delete parent directories before
+          // child directories and their files. This seems to make EPERM errors
+          // more likely on Windows.
+          globSync('**/*', { cwd }).sort(() => 0.5 - Math.random()),
+          RunError,
+        ] as const
       }
-      // randomize results from glob so that when running Promise.all(rimraf)
-      // on the result it will potentially delete parent directories before
-      // child directories and their files. This seems to make EPERM errors
-      // more likely on Windows.
-      return globSync('**/*', { cwd }).sort(() => 0.5 - Math.random())
+
+      t.equal(count, iterations, 'ran all iterations')
+      t.strictSame(globSync('**/*', { cwd }), [], 'no more files')
     },
-  }
+  ] as const
 }
 
 // Copied from sindresorhus/del since it was reported in https://github.com/isaacs/rimraf/pull/314
 // that this test would throw EPERM errors consistently in Windows CI environments.
 // https://github.com/sindresorhus/del/blob/chore/update-deps/test.js#L116
 t.test('windows does not throw EPERM', async t => {
-  const { next, cwd, expected, writeFixtures } = setup(
+  const [{ cwd, expected }, run] = setup(
     t,
     process.env.CI ?
       {
         iterations: 1000,
-        depth: 10,
-        files: 10,
-        fileKb: 10,
+        depth: 15,
+        files: 7,
+        fileKb: 100,
       }
     : {
         iterations: 200,
-        depth: 7,
-        files: 1,
-        fileKb: 0,
+        depth: 8,
+        files: 3,
+        fileKb: 10,
       },
   )
 
-  while (next()) {
-    const toDelete = writeFixtures()
-
-    // throw instead of using tap assertions to cut down on output
-    // when running many iterations
+  for (const [matches, RunError] of run()) {
     assert(
-      arrSame(toDelete, expected),
-      new Error(`glob result is not expected`, {
-        cause: {
-          found: toDelete,
-          wanted: expected,
-        },
+      arrSame(matches, expected),
+      new RunError(`glob result is not expected`, {
+        found: matches,
+        wanted: expected,
       }),
     )
 
-    const notDeleted = (
-      await Promise.all(
-        toDelete.map(d =>
-          windows(join(cwd, d), { glob: false }).then(r => [d, r] as const),
-        ),
-      )
-    ).filter(([, v]) => v !== true)
+    const result = await Promise.all(
+      matches.map(d =>
+        windows(join(cwd, d), { glob: false }).then(r => [d, r] as const),
+      ),
+    ).catch(e => {
+      throw new RunError(`rimraf.windows error`, e)
+    })
+
     assert(
-      !notDeleted.length,
-      new Error(`some entries were not deleted`, {
-        cause: {
-          found: notDeleted,
-        },
+      result.every(([, v]) => v === true),
+      new RunError(`some entries were not deleted`, {
+        found: result,
       }),
     )
 
-    assert(!readdirSync(cwd).length, new Error(`dir is not empty`))
+    assert(!readdirSync(cwd).length, new RunError(`dir is not empty`))
   }
 })
