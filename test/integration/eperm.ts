@@ -38,63 +38,64 @@ const setup = (
     .map(d => join(dir, d))
 
   let iteration = 0
-  return [
-    dir,
-    function* () {
-      while (iteration !== iterations) {
-        // use custom error to throw instead of using tap assertions to cut down
-        // on output when running many iterations
-        class RunError extends Error {
-          constructor(message: string, c?: Record<string, unknown>) {
-            super(message, {
-              cause: {
-                testName: t.name,
-                iteration,
-                ...c,
-              },
-            })
-          }
+  return function* () {
+    while (iteration !== iterations) {
+      // use custom error to throw instead of using tap assertions to cut down
+      // on output when running many iterations
+      class RunError extends Error {
+        constructor(message: string, c?: Record<string, unknown>) {
+          super(message, {
+            cause: {
+              testName: t.name,
+              iteration,
+              ...c,
+            },
+          })
         }
-
-        const actual = readdirSync(dir)
-        assert(
-          !actual.length,
-          new RunError(`dir is not empty`, {
-            found: actual,
-          }),
-        )
-
-        mkdirSync(join(dir, dirs.at(-1)!), { recursive: true })
-        for (const d of dirs) {
-          for (const f of files) {
-            writeFileSync(join(dir, d, f), randomBytes(1024 * fileKb))
-          }
-        }
-
-        // randomize results from glob so that when running Promise.all(rimraf)
-        // on the result it will potentially delete parent directories before
-        // child directories and their files. This seems to make EPERM errors
-        // more likely on Windows.
-        const matches = globSync('**/*', { cwd: dir })
-          .sort(() => 0.5 - Math.random())
-          .map(m => join(dir, m))
-
-        assert(
-          arrSame(matches, entries),
-          new RunError(`glob result does not match expected`, {
-            found: matches,
-            wanted: entries,
-          }),
-        )
-
-        iteration += 1
-
-        yield [matches, RunError] as const
       }
 
-      return [iteration, iterations]
-    },
-  ] as const
+      const actual = readdirSync(dir)
+      assert(
+        !actual.length,
+        new RunError(`dir is not empty`, {
+          found: actual,
+        }),
+      )
+
+      mkdirSync(join(dir, dirs.at(-1)!), { recursive: true })
+      for (const d of dirs) {
+        for (const f of files) {
+          writeFileSync(join(dir, d, f), randomBytes(1024 * fileKb))
+        }
+      }
+
+      // randomize results from glob so that when running Promise.all(rimraf)
+      // on the result it will potentially delete parent directories before
+      // child directories and their files. This seems to make EPERM errors
+      // more likely on Windows.
+      const matches = globSync('**/*', { cwd: dir })
+        .sort(() => 0.5 - Math.random())
+        .map(m => join(dir, m))
+
+      assert(
+        arrSame(matches, entries),
+        new RunError(`glob result does not match expected`, {
+          found: matches,
+          wanted: entries,
+        }),
+      )
+
+      iteration += 1
+
+      yield [matches, RunError] as const
+    }
+
+    return {
+      contents: readdirSync(dir),
+      iteration,
+      iterations,
+    }
+  }
 }
 
 // Copied from sindresorhus/del since it was reported in
@@ -118,10 +119,8 @@ t.test('windows does not throw EPERM', t => {
       }
 
   t.test('sync', t => {
-    const [dir, run] = setup(t, options)
-
     let i
-    const r = run()
+    const r = setup(t, options)()
     while ((i = r.next())) {
       if (i.done) {
         i = i.value
@@ -149,16 +148,14 @@ t.test('windows does not throw EPERM', t => {
       )
     }
 
-    t.strictSame(readdirSync(dir), [])
-    t.equal(i[0], i[1], `ran all ${i[1]} iterations`)
+    t.strictSame(i.contents, [])
+    t.equal(i.iteration, i.iterations, `ran all ${i.iteration} iterations`)
     t.end()
   })
 
   t.test('async', async t => {
-    const [dir, run] = setup(t, options)
-
     let i
-    const r = run()
+    const r = setup(t, options)()
     while ((i = r.next())) {
       if (i.done) {
         i = i.value
@@ -188,8 +185,8 @@ t.test('windows does not throw EPERM', t => {
       )
     }
 
-    t.strictSame(readdirSync(dir), [])
-    t.equal(i[0], i[1], `ran all ${i[1]} iterations`)
+    t.strictSame(i.contents, [])
+    t.equal(i.iteration, i.iterations, `ran all ${i.iteration} iterations`)
   })
 
   t.end()
