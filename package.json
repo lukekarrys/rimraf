@@ -85,5 +85,8 @@
     "rmdir",
     "recursive"
   ],
+  "tap": {
+    "timeout": 600
+  },
   "module": "./dist/esm/index.js"
 }

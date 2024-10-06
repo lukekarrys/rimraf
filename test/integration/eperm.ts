@@ -13,7 +13,7 @@ const letters = (d: number) =>
 // Copied from sindresorhus/del since it was reported in https://github.com/isaacs/rimraf/pull/314
 // that this test would throw EPERM errors consistently in Windows CI environments.
 // https://github.com/sindresorhus/del/blob/chore/update-deps/test.js#L116
-t.test('windows does not throw EPERM', { timeout: 1000 * 60 * 2 }, async t => {
+t.test('windows does not throw EPERM', async t => {
   const iterations = 1000
   const dirDepth = 7
   const fileCount = 10
