@@ -203,4 +203,6 @@ t.test('windows does not throw EPERM', t => {
     t.strictSame(readdirSync(cwd), [])
     t.equal(i[0], i[1], `ran all ${i[1]} iterations`)
   })
+
+  t.end()
 })
