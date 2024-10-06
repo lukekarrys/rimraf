@@ -11,11 +11,9 @@ export const fixEPERM =
         return
       }
       if (fer?.code === 'EPERM') {
-        console.log('fixEPERM error', er)
         try {
           await chmod(path, 0o666)
         } catch (er2) {
-          console.log('fixEPERM chmod error', er2)
           const fer2 = er2 as NodeJS.ErrnoException
           if (fer2?.code === 'ENOENT') {
             return
