@@ -65,9 +65,9 @@ const setup = (
         )
 
         mkdirSync(join(dir, dirs.at(-1)!), { recursive: true })
-        for (const dir of dirs) {
+        for (const d of dirs) {
           for (const f of files) {
-            writeFileSync(join(dir, dir, f), randomBytes(1024 * fileKb))
+            writeFileSync(join(dir, d, f), randomBytes(1024 * fileKb))
           }
         }
 
