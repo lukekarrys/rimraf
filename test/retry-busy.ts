@@ -43,7 +43,7 @@ t.test('retry when known error code thrown', t => {
     t.test(code, async t => {
       let thrown = false
       let calls = 0
-      const arg: string = 'path'
+      const arg = 'path'
       const opt = {}
       const method = (a: string, b?: unknown) => {
         t.equal(a, arg, 'got first argument')
@@ -80,7 +80,7 @@ t.test('retry and eventually give up', t => {
   for (const code of codes) {
     t.test(code, async t => {
       let calls = 0
-      const arg: string = 'path'
+      const arg = 'path'
       const method = (a: string, b?: unknown) => {
         t.equal(a, arg, 'got first argument')
         t.equal(b, undefined, 'did not get another argument')
@@ -99,7 +99,7 @@ t.test('retry and eventually give up', t => {
 })
 
 t.test('throw unknown error gives up right away', async t => {
-  const arg: string = 'path'
+  const arg = 'path'
   const opt = {}
   const method = (a: string, b?: unknown) => {
     t.equal(a, arg, 'got first argument')
