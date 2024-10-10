@@ -405,7 +405,7 @@ t.test('handle EPERMs, chmod returns ENOENT', async t => {
 })
 
 t.test('handle EPERMs, chmod raises something other than ENOENT', async t => {
-  const CHMODS = []
+  const CHMODS: [string, string, Mode][] = []
   let threwAsync = false
   let threwSync = false
   const { rimrafWindows, rimrafWindowsSync } = (await t.mockImport(
@@ -449,6 +449,18 @@ t.test('handle EPERMs, chmod raises something other than ENOENT', async t => {
           },
         },
       }),
+      '../src/rimraf-move-remove.js': {
+        rimrafMoveRemove: async () => {
+          throw Object.assign(new Error('cannot move remove'), {
+            code: 'EWHOA',
+          })
+        },
+        rimrafMoveRemoveSync: () => {
+          throw Object.assign(new Error('cannot move remove'), {
+            code: 'EWHOA',
+          })
+        },
+      },
     },
   )) as typeof import('../src/rimraf-windows.js')
 
@@ -457,14 +469,14 @@ t.test('handle EPERMs, chmod raises something other than ENOENT', async t => {
   t.test('sync', t => {
     // nest it so that we clean up the mess
     const path = t.testdir({ test: fixture }) + '/test'
-    t.throws(() => rimrafWindowsSync(path, {}), { code: 'EPERM' })
+    t.throws(() => rimrafWindowsSync(path, {}), { code: 'EWHOA' })
     t.matchSnapshot(CHMODS.length, 'chmods')
     t.end()
   })
   t.test('async', async t => {
     // nest it so that we clean up the mess
     const path = t.testdir({ test: fixture }) + '/test'
-    t.rejects(rimrafWindows(path, {}), { code: 'EPERM' })
+    t.rejects(rimrafWindows(path, {}), { code: 'EWHOA' })
     t.matchSnapshot(CHMODS.length, 'chmods')
     t.end()
   })

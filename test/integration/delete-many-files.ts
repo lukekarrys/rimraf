@@ -1,8 +1,7 @@
 // this isn't for coverage.  it's basically a smoke test, to ensure that
 // we can delete a lot of files on CI in multiple platforms and node versions.
 import t from 'tap'
-import { statSync, mkdirSync, readdirSync } from '../../src/fs.js'
-import { writeFileSync } from 'fs'
+import { writeFileSync, mkdirSync, readdirSync, statSync } from 'fs'
 import { resolve, dirname } from 'path'
 import { manual } from '../../src/index.js'
 import { setTimeout } from 'timers/promises'

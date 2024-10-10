@@ -1,22 +1,14 @@
 // promisify ourselves, because older nodes don't have fs.promises
 
 import fs, { Dirent } from 'fs'
-import { readdirSync as rdSync } from 'fs'
 
 // sync ones just take the sync version from node
-export {
-  chmodSync,
-  mkdirSync,
-  renameSync,
-  rmdirSync,
-  rmSync,
-  statSync,
-  lstatSync,
-  unlinkSync,
-} from 'fs'
+export { chmodSync, renameSync, rmdirSync, rmSync, unlinkSync } from 'fs'
 
-export const readdirSync = (path: fs.PathLike): Dirent[] =>
-  rdSync(path, { withFileTypes: true })
+export const statSync = (path: fs.PathLike) => fs.statSync(path)
+export const lstatSync = (path: fs.PathLike) => fs.lstatSync(path)
+export const readdirSync = (path: fs.PathLike) =>
+  fs.readdirSync(path, { withFileTypes: true })
 
 // unrolled for better inlining, this seems to get better performance
 // than something like:
@@ -26,19 +18,8 @@ export const readdirSync = (path: fs.PathLike): Dirent[] =>
 const chmod = (path: fs.PathLike, mode: fs.Mode): Promise<void> =>
   new Promise((res, rej) => fs.chmod(path, mode, er => (er ? rej(er) : res())))
 
-const mkdir = (
-  path: fs.PathLike,
-  options?:
-    | fs.Mode
-    | (fs.MakeDirectoryOptions & { recursive?: boolean | null })
-    | null,
-): Promise<string | undefined> =>
+const readdir = async (path: fs.PathLike): Promise<Dirent[]> =>
   new Promise((res, rej) =>
-    fs.mkdir(path, options, (er, made) => (er ? rej(er) : res(made))),
-  )
-
-const readdir = (path: fs.PathLike): Promise<Dirent[]> =>
-  new Promise<Dirent[]>((res, rej) =>
     fs.readdir(path, { withFileTypes: true }, (er, data) =>
       er ? rej(er) : res(data),
     ),
@@ -70,7 +51,6 @@ const unlink = (path: fs.PathLike): Promise<void> =>
 
 export const promises = {
   chmod,
-  mkdir,
   readdir,
   rename,
   rm,

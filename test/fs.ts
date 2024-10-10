@@ -41,7 +41,7 @@ for (const method of Object.keys(fs.promises)) {
       Function,
       `real fs.${method} is a function`,
     )
-    if (method !== 'readdir') {
+    if (!['readdir', 'stat', 'lstat'].includes(method)) {
       t.equal(
         (fs as unknown as MockFsCb)[`${method}Sync`],
         (realFS as unknown as MockFsCb)[`${method}Sync`],
@@ -88,9 +88,19 @@ t.test('failing rejects promise', async t => {
   }
 })
 
-t.test('readdirSync', async t => {
-  const args: unknown[][] = []
-  const fs = await mockFs(t, { readdirSync: (...a) => args.push(a) })
+t.test('patched sync methods', async t => {
+  const readdir: unknown[][] = []
+  const stat: unknown[][] = []
+  const lstat: unknown[][] = []
+  const fs = await mockFs(t, {
+    readdirSync: (...a) => readdir.push(a),
+    statSync: (...a) => stat.push(a),
+    lstatSync: (...a) => lstat.push(a),
+  })
   fs.readdirSync('x')
-  t.strictSame(args, [['x', { withFileTypes: true }]])
+  t.strictSame(readdir, [['x', { withFileTypes: true }]])
+  fs.statSync('x')
+  t.strictSame(stat, [['x']])
+  fs.lstatSync('x')
+  t.strictSame(lstat, [['x']])
 })
