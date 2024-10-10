@@ -345,7 +345,8 @@ t.test('interactive deletes', t => {
 
   const leftovers = (d: string) => {
     try {
-      return readdirSync(d)
+      readdirSync(d)
+      return true
     } catch {
       return false
     }
