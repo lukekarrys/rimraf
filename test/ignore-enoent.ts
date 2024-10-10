@@ -11,12 +11,16 @@ t.test('async', async t => {
     { code: 'EPERM' },
     'eperm is not',
   )
-  const rethrow = new Error('rethrow')
+  const rethrow = Object.assign(new Error('rethrow'), { code: 'RETHROW' })
   t.rejects(
     ignoreENOENT(Promise.reject(eperm()), rethrow),
-    rethrow,
+    { code: 'RETHROW', cause: { code: 'EPERM' } },
     'or rethrows passed in error',
   )
+  const err = await ignoreENOENT(Promise.reject(eperm()), { a: 1 }).catch(
+    (er: unknown) => er,
+  )
+  t.match(err, { a: 1, cause: undefined }, 'no cause when not an error')
 })
 
 t.test('sync', t => {

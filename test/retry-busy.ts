@@ -7,7 +7,7 @@ import {
   retryBusySync,
 } from '../src/retry-busy.js'
 
-import t from 'tap'
+import t, { Test } from 'tap'
 
 t.matchSnapshot(
   {
@@ -36,11 +36,15 @@ t.test('basic working operation when no errors happen', async t => {
   await rB(arg, opt).then(() => t.equal(calls, 2))
 })
 
-t.test('retry when known error code thrown', t => {
-  t.plan(codes.size)
+t.test('retry when known error code thrown', async t => {
+  t.plan(codes.size + 1)
 
-  for (const code of codes) {
-    t.test(code, async t => {
+  const testCode = (
+    t: Test,
+    code: string,
+    extraCodes: Set<string> | undefined,
+  ) =>
+    t.test(`${code} extraCodes:${!!extraCodes}`, async t => {
       let thrown = false
       let calls = 0
       const arg = 'path'
@@ -60,14 +64,19 @@ t.test('retry when known error code thrown', t => {
         }
       }
       const asyncMethod = async (a: string, b?: unknown) => method(a, b)
-      const rBS = retryBusySync(method)
+      const rBS = retryBusySync(method, extraCodes)
       rBS(arg, opt)
       t.equal(calls, 2)
       calls = 0
-      const rB = retryBusy(asyncMethod)
+      const rB = retryBusy(asyncMethod, extraCodes)
       await rB(arg, opt).then(() => t.equal(calls, 2))
     })
+
+  for (const code of codes) {
+    await testCode(t, code, undefined)
   }
+
+  await testCode(t, 'ESOMETHINGELSE', new Set(['ESOMETHINGELSE']))
 })
 
 t.test('retry and eventually give up', t => {

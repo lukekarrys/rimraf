@@ -457,14 +457,20 @@ t.test('handle EPERMs, chmod raises something other than ENOENT', async t => {
   t.test('sync', t => {
     // nest it so that we clean up the mess
     const path = t.testdir({ test: fixture }) + '/test'
-    t.throws(() => rimrafWindowsSync(path, {}), { code: 'EPERM' })
+    t.throws(() => rimrafWindowsSync(path, {}), {
+      code: 'EPERM',
+      cause: { code: 'FOO' },
+    })
     t.matchSnapshot(CHMODS.length, 'chmods')
     t.end()
   })
   t.test('async', async t => {
     // nest it so that we clean up the mess
     const path = t.testdir({ test: fixture }) + '/test'
-    t.rejects(rimrafWindows(path, {}), { code: 'EPERM' })
+    t.rejects(rimrafWindows(path, {}), {
+      code: 'EPERM',
+      cause: { code: 'FOO' },
+    })
     t.matchSnapshot(CHMODS.length, 'chmods')
     t.end()
   })

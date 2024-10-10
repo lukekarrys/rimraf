@@ -13,3 +13,5 @@ export const isFsError = (
 
 export const errorCode = (er: unknown) =>
   isRecord(er) && hasString(er, 'code') ? er.code : null
+
+export const errorCause = (er: unknown) => (isRecord(er) ? er.cause : null)

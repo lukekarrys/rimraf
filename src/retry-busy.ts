@@ -9,7 +9,10 @@ export const RATE = 1.2
 export const MAXRETRIES = 10
 export const codes = new Set(['EMFILE', 'ENFILE', 'EBUSY'])
 
-export const retryBusy = <T>(fn: (path: string) => Promise<T>) => {
+export const retryBusy = <T>(
+  fn: (path: string) => Promise<T>,
+  extraCodes?: Set<string>,
+) => {
   const method = async (
     path: string,
     opt: RimrafAsyncOptions,
@@ -24,9 +27,27 @@ export const retryBusy = <T>(fn: (path: string) => Promise<T>) => {
       try {
         return await fn(path)
       } catch (er) {
-        if (isFsError(er) && er.path === path && codes.has(er.code)) {
+        if (
+          isFsError(er) &&
+          er.path === path &&
+          (codes.has(er.code) || extraCodes?.has(er.code))
+        ) {
           backoff = Math.ceil(backoff * rate)
           total = backoff + total
+          /* c8 ignore start */
+          if (er.code === 'EPERM') {
+            console.trace(
+              'EPERM',
+              {
+                total,
+                mbo,
+                retries,
+                backoff,
+              },
+              er,
+            )
+          }
+          /* c8 ignore stop */
           if (total < mbo) {
             await setTimeout(backoff)
             return method(path, opt, backoff, total)
@@ -45,7 +66,10 @@ export const retryBusy = <T>(fn: (path: string) => Promise<T>) => {
 }
 
 // just retries, no async so no backoff
-export const retryBusySync = <T>(fn: (path: string) => T) => {
+export const retryBusySync = <T>(
+  fn: (path: string) => T,
+  extraCodes?: Set<string>,
+) => {
   const method = (path: string, opt: RimrafOptions) => {
     const max = opt.maxRetries || MAXRETRIES
     let retries = 0
@@ -56,7 +80,7 @@ export const retryBusySync = <T>(fn: (path: string) => T) => {
         if (
           isFsError(er) &&
           er.path === path &&
-          codes.has(er.code) &&
+          (codes.has(er.code) || extraCodes?.has(er.code)) &&
           retries < max
         ) {
           retries++
