@@ -29,20 +29,6 @@ export const retryBusy = <T, U extends RimrafAsyncOptions>(
         ) {
           backoff = Math.ceil(backoff * rate)
           total = backoff + total
-          /* c8 ignore start */
-          if (er.code === 'EPERM') {
-            console.trace(
-              'EPERM',
-              {
-                total,
-                mbo,
-                retries,
-                backoff,
-              },
-              er,
-            )
-          }
-          /* c8 ignore stop */
           if (total < mbo) {
             await setTimeout(backoff)
             return method(path, opt, backoff, total)

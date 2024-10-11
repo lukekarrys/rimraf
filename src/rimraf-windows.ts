@@ -17,7 +17,7 @@ import { ignoreENOENT, ignoreENOENTSync } from './ignore-enoent.js'
 import { readdirOrError, readdirOrErrorSync } from './readdir-or-error.js'
 import { retryBusy, retryBusySync } from './retry-busy.js'
 import { rimrafMoveRemove, rimrafMoveRemoveSync } from './rimraf-move-remove.js'
-import { errorCause, errorCode } from './error.js'
+import { errorCode } from './error.js'
 const { unlink, rmdir, lstat } = promises
 
 const createFallback =
@@ -27,24 +27,9 @@ const createFallback =
     try {
       return (await fn(path, opt)) ?? true
     } catch (er) {
-      if (
-        errorCode(er) === 'ENOTEMPTY' ||
-        (errorCode(er) === 'EPERM' && !errorCode(errorCause(er)))
-      ) {
-        /* c8 ignore start */
-        if (errorCode(er) === 'EPERM') {
-          console.trace('EPERM', er)
-        }
-        /* c8 ignore stop */
+      if (errorCode(er) === 'ENOTEMPTY' || errorCode(er) === 'EPERM') {
         // already filtered, remove from options so we don't call unnecessarily
-        try {
-          return rimrafMoveRemove(path, { ...opt, filter: undefined })
-          /* c8 ignore start */
-        } catch (e2) {
-          console.trace(e2)
-          throw e2
-        }
-        /* c8 ignore stop */
+        return rimrafMoveRemove(path, { ...opt, filter: undefined })
       }
       throw er
     }
@@ -57,24 +42,9 @@ const createFallbackSync =
     try {
       return fn(path, opt) ?? true
     } catch (er) {
-      if (
-        errorCode(er) === 'ENOTEMPTY' ||
-        (errorCode(er) === 'EPERM' && !errorCode(errorCause(er)))
-      ) {
-        /* c8 ignore start */
-        if (errorCode(er) === 'EPERM') {
-          console.trace('EPERM', er)
-        }
-        /* c8 ignore stop */
+      if (errorCode(er) === 'ENOTEMPTY' || errorCode(er) === 'EPERM') {
         // already filtered, remove from options so we don't call unnecessarily
-        try {
-          return rimrafMoveRemoveSync(path, { ...opt, filter: undefined })
-          /* c8 ignore start */
-        } catch (e2) {
-          console.trace(e2)
-          throw e2
-        }
-        /* c8 ignore stop */
+        return rimrafMoveRemoveSync(path, { ...opt, filter: undefined })
       }
       throw er
     }
