@@ -4,7 +4,7 @@ import t, { Test } from 'tap'
 // function is fs.promises is the promisified version of fs[method],
 // and that when the cb returns an error, the promised version fails,
 // and when the cb returns data, the promisified version resolves to it.
-import realFS, { statSync } from 'fs'
+import realFS from 'fs'
 import * as fs from '../src/fs.js'
 import { useNative } from '../src/use-native.js'
 
