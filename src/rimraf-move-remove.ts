@@ -32,6 +32,9 @@ const unlinkFixEPERMSync = retryBusySync(fixEPERMSync(unlinkSync), retryCodes)
 const rmdirFixEPERM = retryBusy(fixEPERM(rmdir), retryCodes)
 const rmdirFixEPERMSync = retryBusySync(fixEPERMSync(rmdirSync), retryCodes)
 
+const retryReaddirOrError = retryBusy(readdirOrError)
+const retryReaddirOrErrorSync = retryBusySync(readdirOrErrorSync)
+
 type RimrafAsyncOptionsNoTmp = Omit<RimrafAsyncOptions, 'tmp'>
 type RimrafSyncOptionsNoTmp = Omit<RimrafSyncOptions, 'tmp'>
 
@@ -61,7 +64,8 @@ const rimrafMoveRemoveDir = async (
 ): Promise<boolean> => {
   opt?.signal?.throwIfAborted()
 
-  const entries = ent.isDirectory() ? await readdirOrError(path) : null
+  const entries =
+    ent.isDirectory() ? await retryReaddirOrError(path, opt) : null
   if (!Array.isArray(entries)) {
     // this can only happen if lstat/readdir lied, or if the dir was
     // swapped out with a file at just the right moment.
@@ -148,7 +152,7 @@ const rimrafMoveRemoveDirSync = (
 ): boolean => {
   opt?.signal?.throwIfAborted()
 
-  const entries = ent.isDirectory() ? readdirOrErrorSync(path) : null
+  const entries = ent.isDirectory() ? retryReaddirOrErrorSync(path, opt) : null
   if (!Array.isArray(entries)) {
     // this can only happen if lstat/readdir lied, or if the dir was
     // swapped out with a file at just the right moment.
