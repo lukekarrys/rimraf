@@ -69,6 +69,7 @@ const createFallbackSync =
         // already filtered, remove from options so we don't call unnecessarily
         try {
           return rimrafMoveRemoveSync(path, { ...opt, filter: undefined })
+          /* c8 ignore start */
         } catch (e2) {
           console.trace(e2)
           throw e2
