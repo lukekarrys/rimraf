@@ -32,11 +32,11 @@ const wrap =
       path = await glob(path, options.glob)
     }
     if (Array.isArray(path)) {
-      return !!(
+      return (
         await Promise.all(path.map(p => fn(pathArg(p, options), options)))
-      ).reduce((a, b) => a && b, true)
+      ).every(v => v === true)
     } else {
-      return !!(await fn(pathArg(path, options), options))
+      return fn(pathArg(path, options), options)
     }
   }
 
@@ -48,11 +48,11 @@ const wrapSync =
       path = globSync(path, options.glob)
     }
     if (Array.isArray(path)) {
-      return !!path
+      return path
         .map(p => fn(pathArg(p, options), options))
-        .reduce((a, b) => a && b, true)
+        .every(v => v === true)
     } else {
-      return !!fn(pathArg(path, options), options)
+      return fn(pathArg(path, options), options)
     }
   }
 

@@ -13,108 +13,118 @@
 
 import { basename, parse, resolve } from 'path'
 import { defaultTmp, defaultTmpSync } from './default-tmp.js'
-
 import { ignoreENOENT, ignoreENOENTSync } from './ignore-enoent.js'
-
-import {
-  chmodSync,
-  lstatSync,
-  promises as fsPromises,
-  renameSync,
-  rmdirSync,
-  unlinkSync,
-} from './fs.js'
-const { lstat, rename, unlink, rmdir, chmod } = fsPromises
-
+import * as FS from './fs.js'
 import { Dirent, Stats } from 'fs'
 import { RimrafAsyncOptions, RimrafSyncOptions } from './index.js'
 import { readdirOrError, readdirOrErrorSync } from './readdir-or-error.js'
+import { fixEPERM, fixEPERMSync } from './fix-eperm.js'
+import { errorCode } from './error.js'
+import * as retry from './retry-busy.js'
+
+type Tmp<T extends RimrafAsyncOptions | RimrafSyncOptions> = T & {
+  tmp: string
+}
 
 // crypto.randomBytes is much slower, and Math.random() is enough here
-const uniqueFilename = (path: string) => `.${basename(path)}.${Math.random()}`
+const uniqueName = (path: string, tmp: string) =>
+  resolve(tmp, `.${basename(path)}.${Math.random()}`)
 
-const unlinkFixEPERM = async (path: string) =>
-  unlink(path).catch((er: Error & { code?: string }) => {
-    if (er.code === 'EPERM') {
-      return chmod(path, 0o666).then(
-        () => unlink(path),
-        er2 => {
-          if (er2.code === 'ENOENT') {
-            return
-          }
-          throw er
-        },
-      )
-    } else if (er.code === 'ENOENT') {
-      return
-    }
-    throw er
-  })
+// On windows use a version of the retry that treats EPERM as a busy code
+/* c8 ignore start */
+const isWin = process.platform === 'win32'
+const fsCodes = isWin ? new Set(['EPERM']) : undefined
+const codes = fsCodes ? new Set([...retry.codes, ...fsCodes]) : retry.codes
+const retryEPERM: retry.RetryBusy = fn =>
+  fsCodes ? retry.retryBusy(fn, fsCodes) : fn
+const retryEPERMSync: retry.RetryBusySync = fn =>
+  fsCodes ? retry.retryBusySync(fn, fsCodes) : fn
+/* c8 ignore stop */
 
-const unlinkFixEPERMSync = (path: string) => {
-  try {
-    unlinkSync(path)
-  } catch (er) {
-    if ((er as NodeJS.ErrnoException)?.code === 'EPERM') {
-      try {
-        return chmodSync(path, 0o666)
-      } catch (er2) {
-        if ((er2 as NodeJS.ErrnoException)?.code === 'ENOENT') {
-          return
-        }
-        throw er
-      }
-    } else if ((er as NodeJS.ErrnoException)?.code === 'ENOENT') {
-      return
-    }
-    throw er
-  }
-}
+const retryBusy: retry.RetryBusy = fn => retry.retryBusy(fn, codes)
+const retryBusySync: retry.RetryBusySync = fn => retry.retryBusySync(fn, codes)
+
+// unlink and rmdir and always retryable regardless of platform
+const unlink = retryBusy(fixEPERM(FS.promises.unlink))
+const unlinkSync = retryBusySync(fixEPERMSync(FS.unlinkSync))
+const rmdir = retryBusy(fixEPERM(FS.promises.rmdir))
+const rmdirSync = retryBusySync(fixEPERMSync(FS.rmdirSync))
+
+// other fs functions are only retried for EPERM and only on windows
+const rename = retryEPERM(
+  async (path: string, opt: Tmp<RimrafAsyncOptions>) => {
+    const newPath = uniqueName(path, opt.tmp)
+    await FS.promises.rename(path, newPath)
+    return newPath
+  },
+)
+const renameSync = retryEPERMSync(
+  (path: string, opt: Tmp<RimrafSyncOptions>) => {
+    const newPath = uniqueName(path, opt.tmp)
+    FS.renameSync(path, newPath)
+    return newPath
+  },
+)
+const readdir = retryEPERM(readdirOrError)
+const readdirSync = retryEPERMSync(readdirOrErrorSync)
+const lstat = retryEPERM(FS.promises.lstat)
+const lstatSync = retryEPERMSync(FS.lstatSync)
 
 export const rimrafMoveRemove = async (
   path: string,
-  opt: RimrafAsyncOptions,
+  { tmp, ...opt }: RimrafAsyncOptions,
 ) => {
-  if (opt?.signal?.aborted) {
-    throw opt.signal.reason
+  opt?.signal?.throwIfAborted()
+
+  tmp ??= await defaultTmp(path)
+  if (path === tmp && parse(path).root !== path) {
+    throw new Error('cannot delete temp directory used for deletion')
   }
-  try {
-    return await rimrafMoveRemoveDir(path, opt, await lstat(path))
-  } catch (er) {
-    if ((er as NodeJS.ErrnoException)?.code === 'ENOENT') return true
-    throw er
+
+  return (
+    (await ignoreENOENT(
+      lstat(path, opt).then(stat =>
+        rimrafMoveRemoveDir(path, { ...opt, tmp }, stat),
+      ),
+    )) ?? true
+  )
+}
+
+export const rimrafMoveRemoveSync = (
+  path: string,
+  { tmp, ...opt }: RimrafSyncOptions,
+) => {
+  opt?.signal?.throwIfAborted()
+
+  tmp ??= defaultTmpSync(path)
+  if (path === tmp && parse(path).root !== path) {
+    throw new Error('cannot delete temp directory used for deletion')
   }
+
+  return (
+    ignoreENOENTSync(() =>
+      rimrafMoveRemoveDirSync(path, { ...opt, tmp }, lstatSync(path, opt)),
+    ) ?? true
+  )
 }
 
 const rimrafMoveRemoveDir = async (
   path: string,
-  opt: RimrafAsyncOptions,
+  opt: Tmp<RimrafAsyncOptions>,
   ent: Dirent | Stats,
 ): Promise<boolean> => {
-  if (opt?.signal?.aborted) {
-    throw opt.signal.reason
-  }
-  if (!opt.tmp) {
-    return rimrafMoveRemoveDir(
-      path,
-      { ...opt, tmp: await defaultTmp(path) },
-      ent,
-    )
-  }
-  if (path === opt.tmp && parse(path).root !== path) {
-    throw new Error('cannot delete temp directory used for deletion')
-  }
+  opt?.signal?.throwIfAborted()
 
-  const entries = ent.isDirectory() ? await readdirOrError(path) : null
+  const entries = ent.isDirectory() ? await readdir(path, opt) : null
   if (!Array.isArray(entries)) {
     // this can only happen if lstat/readdir lied, or if the dir was
     // swapped out with a file at just the right moment.
     /* c8 ignore start */
     if (entries) {
-      if (entries.code === 'ENOENT') {
+      if (errorCode(entries) === 'ENOENT') {
         return true
       }
-      if (entries.code !== 'ENOTDIR') {
+      if (errorCode(entries) !== 'ENOTDIR') {
         throw entries
       }
     }
@@ -122,7 +132,7 @@ const rimrafMoveRemoveDir = async (
     if (opt.filter && !(await opt.filter(path, ent))) {
       return false
     }
-    await ignoreENOENT(tmpUnlink(path, opt.tmp, unlinkFixEPERM))
+    await ignoreENOENT(rename(path, opt).then(p => unlink(p, opt)))
     return true
   }
 
@@ -132,7 +142,7 @@ const rimrafMoveRemoveDir = async (
         rimrafMoveRemoveDir(resolve(path, ent.name), opt, ent),
       ),
     )
-  ).reduce((a, b) => a && b, true)
+  ).every(v => v === true)
   if (!removedAll) {
     return false
   }
@@ -146,63 +156,27 @@ const rimrafMoveRemoveDir = async (
   if (opt.filter && !(await opt.filter(path, ent))) {
     return false
   }
-  await ignoreENOENT(tmpUnlink(path, opt.tmp, rmdir))
+  await ignoreENOENT(rename(path, opt).then(p => rmdir(p, opt)))
   return true
-}
-
-const tmpUnlink = async (
-  path: string,
-  tmp: string,
-  rm: (p: string) => Promise<any>,
-) => {
-  const tmpFile = resolve(tmp, uniqueFilename(path))
-  await rename(path, tmpFile)
-  return await rm(tmpFile)
-}
-
-export const rimrafMoveRemoveSync = (path: string, opt: RimrafSyncOptions) => {
-  if (opt?.signal?.aborted) {
-    throw opt.signal.reason
-  }
-  try {
-    return rimrafMoveRemoveDirSync(path, opt, lstatSync(path))
-  } catch (er) {
-    if ((er as NodeJS.ErrnoException)?.code === 'ENOENT') return true
-    throw er
-  }
 }
 
 const rimrafMoveRemoveDirSync = (
   path: string,
-  opt: RimrafSyncOptions,
+  opt: Tmp<RimrafSyncOptions>,
   ent: Dirent | Stats,
 ): boolean => {
-  if (opt?.signal?.aborted) {
-    throw opt.signal.reason
-  }
-  if (!opt.tmp) {
-    return rimrafMoveRemoveDirSync(
-      path,
-      { ...opt, tmp: defaultTmpSync(path) },
-      ent,
-    )
-  }
-  const tmp: string = opt.tmp
+  opt?.signal?.throwIfAborted()
 
-  if (path === opt.tmp && parse(path).root !== path) {
-    throw new Error('cannot delete temp directory used for deletion')
-  }
-
-  const entries = ent.isDirectory() ? readdirOrErrorSync(path) : null
+  const entries = ent.isDirectory() ? readdirSync(path, opt) : null
   if (!Array.isArray(entries)) {
     // this can only happen if lstat/readdir lied, or if the dir was
     // swapped out with a file at just the right moment.
     /* c8 ignore start */
     if (entries) {
-      if (entries.code === 'ENOENT') {
+      if (errorCode(entries) === 'ENOENT') {
         return true
       }
-      if (entries.code !== 'ENOTDIR') {
+      if (errorCode(entries) !== 'ENOTDIR') {
         throw entries
       }
     }
@@ -210,7 +184,7 @@ const rimrafMoveRemoveDirSync = (
     if (opt.filter && !opt.filter(path, ent)) {
       return false
     }
-    ignoreENOENTSync(() => tmpUnlinkSync(path, tmp, unlinkFixEPERMSync))
+    ignoreENOENTSync(() => unlinkSync(renameSync(path, opt), opt))
     return true
   }
 
@@ -228,16 +202,6 @@ const rimrafMoveRemoveDirSync = (
   if (opt.filter && !opt.filter(path, ent)) {
     return false
   }
-  ignoreENOENTSync(() => tmpUnlinkSync(path, tmp, rmdirSync))
+  ignoreENOENTSync(() => rmdirSync(renameSync(path, opt), opt))
   return true
-}
-
-const tmpUnlinkSync = (
-  path: string,
-  tmp: string,
-  rmSync: (p: string) => void,
-) => {
-  const tmpFile = resolve(tmp, uniqueFilename(path))
-  renameSync(path, tmpFile)
-  return rmSync(tmpFile)
 }

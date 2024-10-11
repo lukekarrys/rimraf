@@ -133,11 +133,11 @@ exports[`test/rimraf-windows.ts > TAP > handle EPERMs on unlink by trying to chm
 1
 `
 
-exports[`test/rimraf-windows.ts > TAP > handle EPERMs, chmod raises something other than ENOENT > async > chmods 1`] = `
+exports[`test/rimraf-windows.ts > TAP > handle EPERMs, chmod raises something other than ENOENT, and moveRemove fallback throws > async > chmods 1`] = `
 0
 `
 
-exports[`test/rimraf-windows.ts > TAP > handle EPERMs, chmod raises something other than ENOENT > sync > chmods 1`] = `
+exports[`test/rimraf-windows.ts > TAP > handle EPERMs, chmod raises something other than ENOENT, and moveRemove fallback throws > sync > chmods 1`] = `
 1
 `
 

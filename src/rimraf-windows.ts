@@ -17,81 +17,59 @@ import { ignoreENOENT, ignoreENOENTSync } from './ignore-enoent.js'
 import { readdirOrError, readdirOrErrorSync } from './readdir-or-error.js'
 import { retryBusy, retryBusySync } from './retry-busy.js'
 import { rimrafMoveRemove, rimrafMoveRemoveSync } from './rimraf-move-remove.js'
+import { errorCode } from './error.js'
 const { unlink, rmdir, lstat } = promises
+
+const rimrafFallbackToMoveRemove =
+  (fn: (path: string, opt: RimrafAsyncOptions) => Promise<boolean | void>) =>
+  async (path: string, opt: RimrafAsyncOptions) => {
+    opt?.signal?.throwIfAborted()
+    try {
+      return (await fn(path, opt)) ?? true
+    } catch (er) {
+      if (errorCode(er) === 'ENOTEMPTY' || errorCode(er) === 'EPERM') {
+        // already filtered, remove from options so we don't call unnecessarily
+        return rimrafMoveRemove(path, { ...opt, filter: undefined })
+      }
+      throw er
+    }
+  }
+
+const rimrafFallbackToMoveRemoveSync =
+  (fn: (path: string, opt: RimrafSyncOptions) => boolean | void) =>
+  (path: string, opt: RimrafSyncOptions) => {
+    opt?.signal?.throwIfAborted()
+    try {
+      return fn(path, opt) ?? true
+    } catch (er) {
+      if (errorCode(er) === 'ENOTEMPTY' || errorCode(er) === 'EPERM') {
+        // already filtered, remove from options so we don't call unnecessarily
+        return rimrafMoveRemoveSync(path, { ...opt, filter: undefined })
+      }
+      throw er
+    }
+  }
 
 const rimrafWindowsFile = retryBusy(fixEPERM(unlink))
 const rimrafWindowsFileSync = retryBusySync(fixEPERMSync(unlinkSync))
-const rimrafWindowsDirRetry = retryBusy(fixEPERM(rmdir))
-const rimrafWindowsDirRetrySync = retryBusySync(fixEPERMSync(rmdirSync))
+const rimrafWindowsDirMoveRemoveFallback = rimrafFallbackToMoveRemove(
+  retryBusy(fixEPERM(rmdir)),
+)
+const rimrafWindowsDirMoveRemoveFallbackSync = rimrafFallbackToMoveRemoveSync(
+  retryBusySync(fixEPERMSync(rmdirSync)),
+)
 
-const rimrafWindowsDirMoveRemoveFallback = async (
-  path: string,
-  opt: RimrafAsyncOptions,
-): Promise<boolean> => {
-  /* c8 ignore start */
-  if (opt?.signal?.aborted) {
-    throw opt.signal.reason
-  }
-  /* c8 ignore stop */
-  // already filtered, remove from options so we don't call unnecessarily
-  const { filter, ...options } = opt
-  try {
-    return await rimrafWindowsDirRetry(path, options)
-  } catch (er) {
-    if ((er as NodeJS.ErrnoException)?.code === 'ENOTEMPTY') {
-      return await rimrafMoveRemove(path, options)
-    }
-    throw er
-  }
-}
+export const rimrafWindows = rimrafFallbackToMoveRemove((path, opt) =>
+  ignoreENOENT(lstat(path).then(stat => rimrafWindowsDir(path, opt, stat))),
+)
 
-const rimrafWindowsDirMoveRemoveFallbackSync = (
-  path: string,
-  opt: RimrafSyncOptions,
-): boolean => {
-  if (opt?.signal?.aborted) {
-    throw opt.signal.reason
-  }
-  // already filtered, remove from options so we don't call unnecessarily
-  const { filter, ...options } = opt
-  try {
-    return rimrafWindowsDirRetrySync(path, options)
-  } catch (er) {
-    const fer = er as NodeJS.ErrnoException
-    if (fer?.code === 'ENOTEMPTY') {
-      return rimrafMoveRemoveSync(path, options)
-    }
-    throw er
-  }
-}
+export const rimrafWindowsSync = rimrafFallbackToMoveRemoveSync((path, opt) =>
+  ignoreENOENTSync(() => rimrafWindowsDirSync(path, opt, lstatSync(path))),
+)
 
 const START = Symbol('start')
 const CHILD = Symbol('child')
 const FINISH = Symbol('finish')
-
-export const rimrafWindows = async (path: string, opt: RimrafAsyncOptions) => {
-  if (opt?.signal?.aborted) {
-    throw opt.signal.reason
-  }
-  try {
-    return await rimrafWindowsDir(path, opt, await lstat(path), START)
-  } catch (er) {
-    if ((er as NodeJS.ErrnoException)?.code === 'ENOENT') return true
-    throw er
-  }
-}
-
-export const rimrafWindowsSync = (path: string, opt: RimrafSyncOptions) => {
-  if (opt?.signal?.aborted) {
-    throw opt.signal.reason
-  }
-  try {
-    return rimrafWindowsDirSync(path, opt, lstatSync(path), START)
-  } catch (er) {
-    if ((er as NodeJS.ErrnoException)?.code === 'ENOENT') return true
-    throw er
-  }
-}
 
 const rimrafWindowsDir = async (
   path: string,
@@ -99,9 +77,7 @@ const rimrafWindowsDir = async (
   ent: Dirent | Stats,
   state = START,
 ): Promise<boolean> => {
-  if (opt?.signal?.aborted) {
-    throw opt.signal.reason
-  }
+  opt?.signal?.throwIfAborted()
 
   const entries = ent.isDirectory() ? await readdirOrError(path) : null
   if (!Array.isArray(entries)) {
@@ -109,10 +85,10 @@ const rimrafWindowsDir = async (
     // swapped out with a file at just the right moment.
     /* c8 ignore start */
     if (entries) {
-      if (entries.code === 'ENOENT') {
+      if (errorCode(entries) === 'ENOENT') {
         return true
       }
-      if (entries.code !== 'ENOTDIR') {
+      if (errorCode(entries) !== 'ENOTDIR') {
         throw entries
       }
     }
@@ -132,7 +108,7 @@ const rimrafWindowsDir = async (
         rimrafWindowsDir(resolve(path, ent.name), opt, ent, s),
       ),
     )
-  ).reduce((a, b) => a && b, true)
+  ).every(v => v === true)
 
   if (state === START) {
     return rimrafWindowsDir(path, opt, ent, FINISH)
@@ -163,10 +139,10 @@ const rimrafWindowsDirSync = (
     // swapped out with a file at just the right moment.
     /* c8 ignore start */
     if (entries) {
-      if (entries.code === 'ENOENT') {
+      if (errorCode(entries) === 'ENOENT') {
         return true
       }
-      if (entries.code !== 'ENOTDIR') {
+      if (errorCode(entries) !== 'ENOTDIR') {
         throw entries
       }
     }
@@ -198,9 +174,7 @@ const rimrafWindowsDirSync = (
     if (opt.filter && !opt.filter(path, ent)) {
       return false
     }
-    ignoreENOENTSync(() => {
-      rimrafWindowsDirMoveRemoveFallbackSync(path, opt)
-    })
+    ignoreENOENTSync(() => rimrafWindowsDirMoveRemoveFallbackSync(path, opt))
   }
   return true
 }
