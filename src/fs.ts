@@ -1,7 +1,6 @@
 // promisify ourselves, because older nodes don't have fs.promises
 
 import fs, { Dirent } from 'fs'
-import { readdirSync as rdSync } from 'fs'
 
 // sync ones just take the sync version from node
 export {
@@ -10,13 +9,13 @@ export {
   renameSync,
   rmdirSync,
   rmSync,
-  statSync,
-  lstatSync,
   unlinkSync,
 } from 'fs'
 
-export const readdirSync = (path: fs.PathLike): Dirent[] =>
-  rdSync(path, { withFileTypes: true })
+export const statSync = (path: fs.PathLike) => fs.statSync(path)
+export const lstatSync = (path: fs.PathLike) => fs.lstatSync(path)
+export const readdirSync = (path: fs.PathLike) =>
+  fs.readdirSync(path, { withFileTypes: true })
 
 // unrolled for better inlining, this seems to get better performance
 // than something like:
@@ -26,8 +25,18 @@ export const readdirSync = (path: fs.PathLike): Dirent[] =>
 const createStack = () => {
   const obj: { stack?: string } = {}
   Error?.captureStackTrace(obj, createStack)
+  const { stack } = obj
   return (er: NodeJS.ErrnoException) => {
-    if (obj.stack != null) er.stack = obj.stack
+    /* c8 ignore start */
+    if (stack) {
+      const prefix =
+        er.stack ? er.stack.substring(0, er.stack.indexOf('\n')) : undefined
+      er.stack =
+        prefix ?
+          prefix + '\n' + stack.substring(stack.indexOf('\n') + 1)
+        : stack
+    }
+    /* c8 ignore stop */
     return er
   }
 }
@@ -54,7 +63,7 @@ const mkdir = (
 
 const readdir = async (path: fs.PathLike): Promise<Dirent[]> => {
   const stack = createStack()
-  return new Promise<Dirent[]>((res, rej) =>
+  return new Promise((res, rej) =>
     fs.readdir(path, { withFileTypes: true }, (er, data) =>
       er ? rej(stack(er)) : res(data),
     ),

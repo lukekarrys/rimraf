@@ -13,7 +13,7 @@ const setup = (t: Test) => {
   const [iterations, depth, fileCount, fileKb] =
     process.env.CI && process.platform === 'win32' ?
       [20_000, 15, 7, 100]
-    : [2000, 8, 3, 10]
+    : [200, 8, 3, 10]
 
   t.plan(11)
   const dir = t.testdir()

@@ -4,7 +4,7 @@ import t, { Test } from 'tap'
 // function is fs.promises is the promisified version of fs[method],
 // and that when the cb returns an error, the promised version fails,
 // and when the cb returns data, the promisified version resolves to it.
-import realFS from 'fs'
+import realFS, { statSync } from 'fs'
 import * as fs from '../src/fs.js'
 import { useNative } from '../src/use-native.js'
 
@@ -41,7 +41,7 @@ for (const method of Object.keys(fs.promises)) {
       Function,
       `real fs.${method} is a function`,
     )
-    if (method !== 'readdir') {
+    if (!['readdir', 'stat', 'lstat'].includes(method)) {
       t.equal(
         (fs as unknown as MockFsCb)[`${method}Sync`],
         (realFS as unknown as MockFsCb)[`${method}Sync`],
@@ -86,15 +86,25 @@ t.test('failing rejects promise', async t => {
   )) {
     t.rejects(
       fn(),
-      { message: 'oops', stack: `at ${m}` },
+      { message: 'oops', stack: new RegExp(`^Error: oops\\n\\s+at ${m}`) },
       `got expected value for ${m}`,
     )
   }
 })
 
-t.test('readdirSync', async t => {
-  const args: unknown[][] = []
-  const fs = await mockFs(t, { readdirSync: (...a) => args.push(a) })
+t.test('patched sync methods', async t => {
+  const readdir: unknown[][] = []
+  const stat: unknown[][] = []
+  const lstat: unknown[][] = []
+  const fs = await mockFs(t, {
+    readdirSync: (...a) => readdir.push(a),
+    statSync: (...a) => stat.push(a),
+    lstatSync: (...a) => lstat.push(a),
+  })
   fs.readdirSync('x')
-  t.strictSame(args, [['x', { withFileTypes: true }]])
+  t.strictSame(readdir, [['x', { withFileTypes: true }]])
+  fs.statSync('x')
+  t.strictSame(stat, [['x']])
+  fs.lstatSync('x')
+  t.strictSame(lstat, [['x']])
 })

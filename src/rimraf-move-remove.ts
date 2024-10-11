@@ -14,63 +14,61 @@
 import { basename, parse, resolve } from 'path'
 import { defaultTmp, defaultTmpSync } from './default-tmp.js'
 import { ignoreENOENT, ignoreENOENTSync } from './ignore-enoent.js'
-import { lstatSync, promises, renameSync, rmdirSync, unlinkSync } from './fs.js'
+import * as FS from './fs.js'
 import { Dirent, Stats } from 'fs'
 import { RimrafAsyncOptions, RimrafSyncOptions } from './index.js'
 import { readdirOrError, readdirOrErrorSync } from './readdir-or-error.js'
 import { fixEPERM, fixEPERMSync } from './fix-eperm.js'
 import { errorCode } from './error.js'
 import * as retry from './retry-busy.js'
-const { lstat, rename, unlink, rmdir } = promises
 
-type RimrafAsyncOptionsTmp = RimrafAsyncOptions & { tmp: string }
-type RimrafSyncOptionsTmp = RimrafSyncOptions & { tmp: string }
+type Tmp<T extends RimrafAsyncOptions | RimrafSyncOptions> = T & {
+  tmp: string
+}
 
 // crypto.randomBytes is much slower, and Math.random() is enough here
-const uniqueFilename = (path: string) => `.${basename(path)}.${Math.random()}`
+const uniqueName = (path: string, tmp: string) =>
+  resolve(tmp, `.${basename(path)}.${Math.random()}`)
 
-// always retry EPERM errors on windows
-/* c8 ignore next */
-const retryCodes = process.platform === 'win32' ? new Set(['EPERM']) : undefined
-const retryBusy = <T, U extends RimrafAsyncOptions>(
-  fn: (path: string, opt: U) => Promise<T>,
-) => retry.retryBusy(fn, retryCodes)
-const retryBusySync = <T, U extends RimrafSyncOptions>(
-  fn: (path: string, opt: U) => T,
-) => retry.retryBusySync(fn, retryCodes)
+// On windows use a version of the retry that treats EPERM as a busy code
+/* c8 ignore start */
+const isWin = process.platform === 'win32'
+const fsCodes = isWin ? new Set(['EPERM']) : undefined
+const codes = fsCodes ? new Set([...retry.codes, ...fsCodes]) : retry.codes
+const retryEPERM: retry.RetryBusy = fn =>
+  fsCodes ? retry.retryBusy(fn, fsCodes) : fn
+const retryEPERMSync: retry.RetryBusySync = fn =>
+  fsCodes ? retry.retryBusySync(fn, fsCodes) : fn
+/* c8 ignore stop */
 
-const unlinkFixEPERM = retryBusy(fixEPERM(unlink))
-const unlinkFixEPERMSync = retryBusySync(fixEPERMSync(unlinkSync))
-const rmdirFixEPERM = retryBusy(fixEPERM(rmdir))
-const rmdirFixEPERMSync = retryBusySync(fixEPERMSync(rmdirSync))
-const retryReaddirOrError = retryBusy(readdirOrError)
-const retryReaddirOrErrorSync = retryBusySync(readdirOrErrorSync)
-const retryRename = retryBusy(async (path, opt: RimrafAsyncOptionsTmp) => {
-  const tmpFile = resolve(opt.tmp, uniqueFilename(path))
-  await rename(path, tmpFile)
-  return tmpFile
-})
-const retryRenameSync = retryBusySync((path, opt: RimrafSyncOptionsTmp) => {
-  const tmpFile = resolve(opt.tmp, uniqueFilename(path))
-  renameSync(path, tmpFile)
-  return tmpFile
-})
+const retryBusy: retry.RetryBusy = fn => retry.retryBusy(fn, codes)
+const retryBusySync: retry.RetryBusySync = fn => retry.retryBusySync(fn, codes)
 
-const tmpUnlink = async (
-  path: string,
-  opt: RimrafAsyncOptionsTmp,
-  rm: (p: string, opt: RimrafAsyncOptionsTmp) => Promise<void>,
-) => {
-  await rm(await retryRename(path, opt), opt)
-}
+// unlink and rmdir and always retryable regardless of platform
+const unlink = retryBusy(fixEPERM(FS.promises.unlink))
+const unlinkSync = retryBusySync(fixEPERMSync(FS.unlinkSync))
+const rmdir = retryBusy(fixEPERM(FS.promises.rmdir))
+const rmdirSync = retryBusySync(fixEPERMSync(FS.rmdirSync))
 
-const tmpUnlinkSync = (
-  path: string,
-  opt: RimrafSyncOptionsTmp,
-  rmSync: (p: string, opt: RimrafSyncOptionsTmp) => void,
-) => {
-  rmSync(retryRenameSync(path, opt), opt)
-}
+// other fs functions are only retried for EPERM and only on windows
+const rename = retryEPERM(
+  async (path: string, opt: Tmp<RimrafAsyncOptions>) => {
+    const newPath = uniqueName(path, opt.tmp)
+    await FS.promises.rename(path, newPath)
+    return newPath
+  },
+)
+const renameSync = retryEPERMSync(
+  (path: string, opt: Tmp<RimrafSyncOptions>) => {
+    const newPath = uniqueName(path, opt.tmp)
+    FS.renameSync(path, newPath)
+    return newPath
+  },
+)
+const readdir = retryEPERM(readdirOrError)
+const readdirSync = retryEPERMSync(readdirOrErrorSync)
+const lstat = retryEPERM(FS.promises.lstat)
+const lstatSync = retryEPERMSync(FS.lstatSync)
 
 export const rimrafMoveRemove = async (
   path: string,
@@ -85,7 +83,7 @@ export const rimrafMoveRemove = async (
 
   return (
     (await ignoreENOENT(
-      lstat(path).then(stat =>
+      lstat(path, opt).then(stat =>
         rimrafMoveRemoveDir(path, { ...opt, tmp }, stat),
       ),
     )) ?? true
@@ -105,20 +103,19 @@ export const rimrafMoveRemoveSync = (
 
   return (
     ignoreENOENTSync(() =>
-      rimrafMoveRemoveDirSync(path, { ...opt, tmp }, lstatSync(path)),
+      rimrafMoveRemoveDirSync(path, { ...opt, tmp }, lstatSync(path, opt)),
     ) ?? true
   )
 }
 
 const rimrafMoveRemoveDir = async (
   path: string,
-  opt: RimrafAsyncOptionsTmp,
+  opt: Tmp<RimrafAsyncOptions>,
   ent: Dirent | Stats,
 ): Promise<boolean> => {
   opt?.signal?.throwIfAborted()
 
-  const entries =
-    ent.isDirectory() ? await retryReaddirOrError(path, opt) : null
+  const entries = ent.isDirectory() ? await readdir(path, opt) : null
   if (!Array.isArray(entries)) {
     // this can only happen if lstat/readdir lied, or if the dir was
     // swapped out with a file at just the right moment.
@@ -135,7 +132,7 @@ const rimrafMoveRemoveDir = async (
     if (opt.filter && !(await opt.filter(path, ent))) {
       return false
     }
-    await ignoreENOENT(tmpUnlink(path, opt, unlinkFixEPERM))
+    await ignoreENOENT(rename(path, opt).then(p => unlink(p, opt)))
     return true
   }
 
@@ -159,18 +156,18 @@ const rimrafMoveRemoveDir = async (
   if (opt.filter && !(await opt.filter(path, ent))) {
     return false
   }
-  await ignoreENOENT(tmpUnlink(path, opt, rmdirFixEPERM))
+  await ignoreENOENT(rename(path, opt).then(p => rmdir(p, opt)))
   return true
 }
 
 const rimrafMoveRemoveDirSync = (
   path: string,
-  opt: RimrafSyncOptionsTmp,
+  opt: Tmp<RimrafSyncOptions>,
   ent: Dirent | Stats,
 ): boolean => {
   opt?.signal?.throwIfAborted()
 
-  const entries = ent.isDirectory() ? retryReaddirOrErrorSync(path, opt) : null
+  const entries = ent.isDirectory() ? readdirSync(path, opt) : null
   if (!Array.isArray(entries)) {
     // this can only happen if lstat/readdir lied, or if the dir was
     // swapped out with a file at just the right moment.
@@ -187,7 +184,7 @@ const rimrafMoveRemoveDirSync = (
     if (opt.filter && !opt.filter(path, ent)) {
       return false
     }
-    ignoreENOENTSync(() => tmpUnlinkSync(path, opt, unlinkFixEPERMSync))
+    ignoreENOENTSync(() => unlinkSync(renameSync(path, opt), opt))
     return true
   }
 
@@ -205,6 +202,6 @@ const rimrafMoveRemoveDirSync = (
   if (opt.filter && !opt.filter(path, ent)) {
     return false
   }
-  ignoreENOENTSync(() => tmpUnlinkSync(path, opt, rmdirFixEPERMSync))
+  ignoreENOENTSync(() => rmdirSync(renameSync(path, opt), opt))
   return true
 }
