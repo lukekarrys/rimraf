@@ -24,10 +24,10 @@ export const readdirSync = (path: fs.PathLike): Dirent[] =>
 // which would be a bit cleaner.
 
 const createStack = () => {
-  const obj = { stack: '' }
-  Error.captureStackTrace(obj, createStack)
+  const obj: { stack?: string } = {}
+  Error?.captureStackTrace(obj, createStack)
   return (er: NodeJS.ErrnoException) => {
-    er.stack = obj.stack
+    if (obj.stack != null) er.stack = obj.stack
     return er
   }
 }
