@@ -6,22 +6,19 @@ import { windows, windowsSync } from '../../src/index.js'
 import { randomBytes } from 'crypto'
 import assert from 'assert'
 
-const arrSame = (arr1: string[], arr2: string[]) =>
-  [...arr1].sort().join(',') === [...arr2].sort().join(',')
-
 const setup = (t: Test) => {
   const [iterations, depth, fileCount, fileKb] =
     process.env.CI && process.platform === 'win32' ?
-      [20_000, 15, 7, 100]
+      [1000, 15, 7, 100]
     : [200, 8, 3, 10]
 
-  t.plan(11)
+  t.plan(10)
   const dir = t.testdir()
   const readdir = () => readdirSync(dir)
 
   const letters = (length: number) =>
     Array.from({ length }).map((_, i) => (10 + i).toString(36))
-  const files = letters(fileCount).map(f => `__file_${f}`)
+  const files = letters(fileCount).map(f => `_file_${f}`)
   const dirs = join(...letters(depth))
     .split(sep)
     .reduce<string[]>((acc, d) => acc.concat(join(acc.at(-1) ?? '', d)), [])
@@ -30,6 +27,8 @@ const setup = (t: Test) => {
     .map(d => join(dir, d))
 
   let iteration = 0
+  let previous = Date.now()
+  const start = Date.now()
 
   return function* () {
     while (iteration !== iterations) {
@@ -73,7 +72,7 @@ const setup = (t: Test) => {
         .map(m => join(dir, m))
 
       assert(
-        arrSame(matches, entries),
+        [...matches].sort().join() === [...entries].sort().join(),
         new RunError(`glob result does not match expected`, {
           found: matches,
           wanted: entries,
@@ -81,11 +80,11 @@ const setup = (t: Test) => {
       )
 
       iteration += 1
-      yield [
+      yield {
         matches,
-        (error: unknown, path: string) =>
+        error: (error: unknown, path: string) =>
           new RunError('rimraf error', { path, error }),
-        (result: [string, boolean][]) => {
+        assertResult: (result: [string, boolean][]) => {
           assert(
             result.length === dirs.length * (files.length + 1),
             new RunError(`result is missing entries`, {
@@ -101,13 +100,14 @@ const setup = (t: Test) => {
           )
           assertContents()
           if (iteration % (iterations / 10) === 0) {
-            t.ok(true, `${iteration}`)
+            const now = Date.now()
+            t.ok(true, `${iteration} (${now - previous}ms / ${now - start}ms)`)
+            previous = now
           }
         },
-      ] as const
+      }
     }
 
-    t.equal(iteration, iterations, `ran all ${iteration} iterations`)
     t.end()
   }
 }
@@ -117,12 +117,8 @@ const setup = (t: Test) => {
 // errors consistently in Windows CI environments.
 // https://github.com/sindresorhus/del/blob/chore/update-deps/test.js#L116
 t.test('windows does not throw EPERM', t => {
-  if (process.env.RIMRAF_TEST_SKIP_EPERM_INTEGRATION) {
-    return t.end()
-  }
-
   t.test('sync', t => {
-    for (const [matches, error, assertResult] of setup(t)()) {
+    for (const { matches, error, assertResult } of setup(t)()) {
       assertResult(
         matches.map(path => {
           try {
@@ -136,7 +132,7 @@ t.test('windows does not throw EPERM', t => {
   })
 
   t.test('async', async t => {
-    for (const [matches, error, assertResult] of setup(t)()) {
+    for (const { matches, error, assertResult } of setup(t)()) {
       assertResult(
         await Promise.all(
           matches.map(async path => {

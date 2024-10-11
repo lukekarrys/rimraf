@@ -3,46 +3,6 @@ name: CI
 on: [push, pull_request]
 
 jobs:
-  eperm:
-    runs-on: windows-latest
-    defaults:
-      run:
-        shell: bash
-
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Use Nodejs 22.x
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22.x
-
-      - name: Install dependencies
-        run: npm install
-
-      - run: npm test -- -t0 test/integration/eperm.ts --disable-coverage --grep=. --grep=async
-      - run: npm test -- -t0 test/integration/eperm.ts --disable-coverage --grep=. --grep=async
-      - run: npm test -- -t0 test/integration/eperm.ts --disable-coverage --grep=. --grep=async
-      - run: npm test -- -t0 test/integration/eperm.ts --disable-coverage --grep=. --grep=async
-      - run: npm test -- -t0 test/integration/eperm.ts --disable-coverage --grep=. --grep=async
-      - run: npm test -- -t0 test/integration/eperm.ts --disable-coverage --grep=. --grep=async
-      - run: npm test -- -t0 test/integration/eperm.ts --disable-coverage --grep=. --grep=async
-      - run: npm test -- -t0 test/integration/eperm.ts --disable-coverage --grep=. --grep=async
-      - run: npm test -- -t0 test/integration/eperm.ts --disable-coverage --grep=. --grep=async
-      - run: npm test -- -t0 test/integration/eperm.ts --disable-coverage --grep=. --grep=async
-      - run: npm test -- -t0 test/integration/eperm.ts --disable-coverage --grep=. --grep=async
-      - run: npm test -- -t0 test/integration/eperm.ts --disable-coverage --grep=. --grep=async
-      - run: npm test -- -t0 test/integration/eperm.ts --disable-coverage --grep=. --grep=async
-      - run: npm test -- -t0 test/integration/eperm.ts --disable-coverage --grep=. --grep=async
-      - run: npm test -- -t0 test/integration/eperm.ts --disable-coverage --grep=. --grep=async
-      - run: npm test -- -t0 test/integration/eperm.ts --disable-coverage --grep=. --grep=async
-      - run: npm test -- -t0 test/integration/eperm.ts --disable-coverage --grep=. --grep=async
-      - run: npm test -- -t0 test/integration/eperm.ts --disable-coverage --grep=. --grep=async
-      - run: npm test -- -t0 test/integration/eperm.ts --disable-coverage --grep=. --grep=async
-      - run: npm test -- -t0 test/integration/eperm.ts --disable-coverage --grep=. --grep=async
-      - run: npm test -- -t0 test/integration/eperm.ts --disable-coverage --grep=. --grep=async
-
   build:
     strategy:
       matrix:
@@ -81,4 +41,3 @@ jobs:
           RIMRAF_TEST_START_CHAR: a
           RIMRAF_TEST_END_CHAR: f
           RIMRAF_TEST_DEPTH: 5
-          RIMRAF_TEST_SKIP_EPERM_INTEGRATION: 1
