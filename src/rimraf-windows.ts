@@ -31,11 +31,20 @@ const createFallback =
         errorCode(er) === 'ENOTEMPTY' ||
         (errorCode(er) === 'EPERM' && !errorCode(errorCause(er)))
       ) {
+        /* c8 ignore start */
         if (errorCode(er) === 'EPERM') {
           console.trace('EPERM', er)
         }
+        /* c8 ignore stop */
         // already filtered, remove from options so we don't call unnecessarily
-        return rimrafMoveRemove(path, { ...opt, filter: undefined })
+        try {
+          return rimrafMoveRemove(path, { ...opt, filter: undefined })
+          /* c8 ignore start */
+        } catch (e2) {
+          console.trace(e2)
+          throw e2
+        }
+        /* c8 ignore stop */
       }
       throw er
     }
@@ -52,11 +61,19 @@ const createFallbackSync =
         errorCode(er) === 'ENOTEMPTY' ||
         (errorCode(er) === 'EPERM' && !errorCode(errorCause(er)))
       ) {
+        /* c8 ignore start */
         if (errorCode(er) === 'EPERM') {
           console.trace('EPERM', er)
         }
+        /* c8 ignore stop */
         // already filtered, remove from options so we don't call unnecessarily
-        return rimrafMoveRemoveSync(path, { ...opt, filter: undefined })
+        try {
+          return rimrafMoveRemoveSync(path, { ...opt, filter: undefined })
+        } catch (e2) {
+          console.trace(e2)
+          throw e2
+        }
+        /* c8 ignore stop */
       }
       throw er
     }

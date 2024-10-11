@@ -1,3 +1,4 @@
+import { RimrafOptions } from '../src/opt-arg.js'
 import {
   codes,
   MAXBACKOFF,
@@ -23,12 +24,12 @@ t.test('basic working operation when no errors happen', async t => {
   let calls = 0
   const arg: string = 'path'
   const opt = {}
-  const method = (a: string, b?: unknown) => {
+  const method = (a: string, b: RimrafOptions) => {
     t.equal(a, arg, 'got first argument')
-    t.equal(b, undefined, 'did not get another argument')
+    t.equal(b, opt, 'got opts argument')
     calls++
   }
-  const asyncMethod = async (a: string, b?: unknown) => method(a, b)
+  const asyncMethod = async (a: string, b: RimrafOptions) => method(a, b)
   const rBS = retryBusySync(method)
   rBS(arg, opt)
   t.equal(calls, 1)
@@ -49,9 +50,9 @@ t.test('retry when known error code thrown', async t => {
       let calls = 0
       const arg = 'path'
       const opt = {}
-      const method = (a: string, b?: unknown) => {
+      const method = (a: string, b: RimrafOptions) => {
         t.equal(a, arg, 'got first argument')
-        t.equal(b, undefined, 'did not get another argument')
+        t.equal(b, opt, 'got opts argument')
         if (!thrown) {
           thrown = true
           t.equal(calls, 0, 'first call')
@@ -63,7 +64,7 @@ t.test('retry when known error code thrown', async t => {
           thrown = false
         }
       }
-      const asyncMethod = async (a: string, b?: unknown) => method(a, b)
+      const asyncMethod = async (a: string, b: RimrafOptions) => method(a, b)
       const rBS = retryBusySync(method, extraCodes)
       rBS(arg, opt)
       t.equal(calls, 2)
@@ -90,13 +91,13 @@ t.test('retry and eventually give up', t => {
     t.test(code, async t => {
       let calls = 0
       const arg = 'path'
-      const method = (a: string, b?: unknown) => {
+      const method = (a: string, b: RimrafOptions) => {
         t.equal(a, arg, 'got first argument')
-        t.equal(b, undefined, 'did not get another argument')
+        t.equal(b, opt, 'got opts argument')
         calls++
         throw Object.assign(new Error(code), { path: a, code })
       }
-      const asyncMethod = async (a: string, b?: unknown) => method(a, b)
+      const asyncMethod = async (a: string, b: RimrafOptions) => method(a, b)
       const rBS = retryBusySync(method)
       t.throws(() => rBS(arg, opt), { path: arg, code })
       t.equal(calls, 3)
@@ -110,12 +111,12 @@ t.test('retry and eventually give up', t => {
 t.test('throw unknown error gives up right away', async t => {
   const arg = 'path'
   const opt = {}
-  const method = (a: string, b?: unknown) => {
+  const method = (a: string, b: RimrafOptions) => {
     t.equal(a, arg, 'got first argument')
-    t.equal(b, undefined, 'did not get another argument')
+    t.equal(b, opt, 'got opts argument')
     throw Object.assign(new Error('nope'))
   }
-  const asyncMethod = async (a: string, b?: unknown) => method(a, b)
+  const asyncMethod = async (a: string, b: RimrafOptions) => method(a, b)
   const rBS = retryBusySync(method)
   t.throws(() => rBS(arg, opt), { message: 'nope' })
   const rB = retryBusy(asyncMethod)

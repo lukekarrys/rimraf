@@ -1,4 +1,4 @@
-import { RimrafAsyncOptions, RimrafOptions } from './index.js'
+import { RimrafAsyncOptions, RimrafSyncOptions } from './index.js'
 
 /* c8 ignore next */
 const [major = 0, minor = 0] = process.version
@@ -13,7 +13,7 @@ export const useNative: (opt?: RimrafAsyncOptions) => boolean =
   !hasNative || process.platform === 'win32' ?
     () => false
   : opt => !opt?.signal && !opt?.filter
-export const useNativeSync: (opt?: RimrafOptions) => boolean =
+export const useNativeSync: (opt?: RimrafSyncOptions) => boolean =
   !hasNative || process.platform === 'win32' ?
     () => false
   : opt => !opt?.signal && !opt?.filter

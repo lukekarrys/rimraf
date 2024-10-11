@@ -20,23 +20,57 @@ import { RimrafAsyncOptions, RimrafSyncOptions } from './index.js'
 import { readdirOrError, readdirOrErrorSync } from './readdir-or-error.js'
 import { fixEPERM, fixEPERMSync } from './fix-eperm.js'
 import { errorCode } from './error.js'
-import { retryBusy, retryBusySync } from './retry-busy.js'
+import * as retry from './retry-busy.js'
 const { lstat, rename, unlink, rmdir } = promises
+
+type RimrafAsyncOptionsTmp = RimrafAsyncOptions & { tmp: string }
+type RimrafSyncOptionsTmp = RimrafSyncOptions & { tmp: string }
 
 // crypto.randomBytes is much slower, and Math.random() is enough here
 const uniqueFilename = (path: string) => `.${basename(path)}.${Math.random()}`
 
-const retryCodes = new Set(['EPERM'])
-const unlinkFixEPERM = retryBusy(fixEPERM(unlink), retryCodes)
-const unlinkFixEPERMSync = retryBusySync(fixEPERMSync(unlinkSync), retryCodes)
-const rmdirFixEPERM = retryBusy(fixEPERM(rmdir), retryCodes)
-const rmdirFixEPERMSync = retryBusySync(fixEPERMSync(rmdirSync), retryCodes)
+// always retry EPERM errors on windows
+/* c8 ignore next */
+const retryCodes = process.platform === 'win32' ? new Set(['EPERM']) : undefined
+const retryBusy = <T, U extends RimrafAsyncOptions>(
+  fn: (path: string, opt: U) => Promise<T>,
+) => retry.retryBusy(fn, retryCodes)
+const retryBusySync = <T, U extends RimrafSyncOptions>(
+  fn: (path: string, opt: U) => T,
+) => retry.retryBusySync(fn, retryCodes)
 
+const unlinkFixEPERM = retryBusy(fixEPERM(unlink))
+const unlinkFixEPERMSync = retryBusySync(fixEPERMSync(unlinkSync))
+const rmdirFixEPERM = retryBusy(fixEPERM(rmdir))
+const rmdirFixEPERMSync = retryBusySync(fixEPERMSync(rmdirSync))
 const retryReaddirOrError = retryBusy(readdirOrError)
 const retryReaddirOrErrorSync = retryBusySync(readdirOrErrorSync)
+const retryRename = retryBusy(async (path, opt: RimrafAsyncOptionsTmp) => {
+  const tmpFile = resolve(opt.tmp, uniqueFilename(path))
+  await rename(path, tmpFile)
+  return tmpFile
+})
+const retryRenameSync = retryBusySync((path, opt: RimrafSyncOptionsTmp) => {
+  const tmpFile = resolve(opt.tmp, uniqueFilename(path))
+  renameSync(path, tmpFile)
+  return tmpFile
+})
 
-type RimrafAsyncOptionsNoTmp = Omit<RimrafAsyncOptions, 'tmp'>
-type RimrafSyncOptionsNoTmp = Omit<RimrafSyncOptions, 'tmp'>
+const tmpUnlink = async (
+  path: string,
+  opt: RimrafAsyncOptionsTmp,
+  rm: (p: string, opt: RimrafAsyncOptionsTmp) => Promise<void>,
+) => {
+  await rm(await retryRename(path, opt), opt)
+}
+
+const tmpUnlinkSync = (
+  path: string,
+  opt: RimrafSyncOptionsTmp,
+  rmSync: (p: string, opt: RimrafSyncOptionsTmp) => void,
+) => {
+  rmSync(retryRenameSync(path, opt), opt)
+}
 
 export const rimrafMoveRemove = async (
   path: string,
@@ -51,15 +85,34 @@ export const rimrafMoveRemove = async (
 
   return (
     (await ignoreENOENT(
-      lstat(path).then(stat => rimrafMoveRemoveDir(path, tmp, opt, stat)),
+      lstat(path).then(stat =>
+        rimrafMoveRemoveDir(path, { ...opt, tmp }, stat),
+      ),
     )) ?? true
+  )
+}
+
+export const rimrafMoveRemoveSync = (
+  path: string,
+  { tmp, ...opt }: RimrafSyncOptions,
+) => {
+  opt?.signal?.throwIfAborted()
+
+  tmp ??= defaultTmpSync(path)
+  if (path === tmp && parse(path).root !== path) {
+    throw new Error('cannot delete temp directory used for deletion')
+  }
+
+  return (
+    ignoreENOENTSync(() =>
+      rimrafMoveRemoveDirSync(path, { ...opt, tmp }, lstatSync(path)),
+    ) ?? true
   )
 }
 
 const rimrafMoveRemoveDir = async (
   path: string,
-  tmp: string,
-  opt: RimrafAsyncOptionsNoTmp,
+  opt: RimrafAsyncOptionsTmp,
   ent: Dirent | Stats,
 ): Promise<boolean> => {
   opt?.signal?.throwIfAborted()
@@ -74,11 +127,6 @@ const rimrafMoveRemoveDir = async (
       if (errorCode(entries) === 'ENOENT') {
         return true
       }
-      if (errorCode(entries) === 'EPERM') {
-        // TODO: what to do here??
-        console.trace('EPERM', entries)
-        throw entries
-      }
       if (errorCode(entries) !== 'ENOTDIR') {
         throw entries
       }
@@ -87,14 +135,14 @@ const rimrafMoveRemoveDir = async (
     if (opt.filter && !(await opt.filter(path, ent))) {
       return false
     }
-    await ignoreENOENT(tmpUnlink(path, tmp, opt, unlinkFixEPERM))
+    await ignoreENOENT(tmpUnlink(path, opt, unlinkFixEPERM))
     return true
   }
 
   const removedAll = (
     await Promise.all(
       entries.map(ent =>
-        rimrafMoveRemoveDir(resolve(path, ent.name), tmp, opt, ent),
+        rimrafMoveRemoveDir(resolve(path, ent.name), opt, ent),
       ),
     )
   ).every(v => v === true)
@@ -111,43 +159,13 @@ const rimrafMoveRemoveDir = async (
   if (opt.filter && !(await opt.filter(path, ent))) {
     return false
   }
-  await ignoreENOENT(tmpUnlink(path, tmp, opt, rmdirFixEPERM))
+  await ignoreENOENT(tmpUnlink(path, opt, rmdirFixEPERM))
   return true
-}
-
-const tmpUnlink = async (
-  path: string,
-  tmp: string,
-  opt: RimrafAsyncOptionsNoTmp,
-  rm: (p: string, opt: RimrafAsyncOptionsNoTmp) => Promise<void>,
-) => {
-  const tmpFile = resolve(tmp, uniqueFilename(path))
-  await rename(path, tmpFile)
-  return await rm(tmpFile, opt)
-}
-
-export const rimrafMoveRemoveSync = (
-  path: string,
-  { tmp, ...opt }: RimrafSyncOptions,
-) => {
-  opt?.signal?.throwIfAborted()
-
-  tmp ??= defaultTmpSync(path)
-  if (path === tmp && parse(path).root !== path) {
-    throw new Error('cannot delete temp directory used for deletion')
-  }
-
-  return (
-    ignoreENOENTSync(() =>
-      rimrafMoveRemoveDirSync(path, tmp, opt, lstatSync(path)),
-    ) ?? true
-  )
 }
 
 const rimrafMoveRemoveDirSync = (
   path: string,
-  tmp: string,
-  opt: RimrafSyncOptionsNoTmp,
+  opt: RimrafSyncOptionsTmp,
   ent: Dirent | Stats,
 ): boolean => {
   opt?.signal?.throwIfAborted()
@@ -161,11 +179,6 @@ const rimrafMoveRemoveDirSync = (
       if (errorCode(entries) === 'ENOENT') {
         return true
       }
-      if (errorCode(entries) === 'EPERM') {
-        // TODO: what to do here??
-        console.trace('EPERM', entries)
-        throw entries
-      }
       if (errorCode(entries) !== 'ENOTDIR') {
         throw entries
       }
@@ -174,14 +187,14 @@ const rimrafMoveRemoveDirSync = (
     if (opt.filter && !opt.filter(path, ent)) {
       return false
     }
-    ignoreENOENTSync(() => tmpUnlinkSync(path, tmp, opt, unlinkFixEPERMSync))
+    ignoreENOENTSync(() => tmpUnlinkSync(path, opt, unlinkFixEPERMSync))
     return true
   }
 
   let removedAll = true
   for (const ent of entries) {
     const p = resolve(path, ent.name)
-    removedAll = rimrafMoveRemoveDirSync(p, tmp, opt, ent) && removedAll
+    removedAll = rimrafMoveRemoveDirSync(p, opt, ent) && removedAll
   }
   if (!removedAll) {
     return false
@@ -192,17 +205,6 @@ const rimrafMoveRemoveDirSync = (
   if (opt.filter && !opt.filter(path, ent)) {
     return false
   }
-  ignoreENOENTSync(() => tmpUnlinkSync(path, tmp, opt, rmdirFixEPERMSync))
+  ignoreENOENTSync(() => tmpUnlinkSync(path, opt, rmdirFixEPERMSync))
   return true
-}
-
-const tmpUnlinkSync = (
-  path: string,
-  tmp: string,
-  opt: RimrafSyncOptionsNoTmp,
-  rmSync: (p: string, opt: RimrafSyncOptionsNoTmp) => void,
-) => {
-  const tmpFile = resolve(tmp, uniqueFilename(path))
-  renameSync(path, tmpFile)
-  return rmSync(tmpFile, opt)
 }

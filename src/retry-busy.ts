@@ -1,7 +1,7 @@
 // note: max backoff is the maximum that any *single* backoff will do
 
 import { setTimeout } from 'timers/promises'
-import { RimrafAsyncOptions, RimrafOptions } from './index.js'
+import { RimrafAsyncOptions, RimrafSyncOptions } from './index.js'
 import { isFsError } from './error.js'
 
 export const MAXBACKOFF = 200
@@ -9,23 +9,18 @@ export const RATE = 1.2
 export const MAXRETRIES = 10
 export const codes = new Set(['EMFILE', 'ENFILE', 'EBUSY'])
 
-export const retryBusy = <T>(
-  fn: (path: string) => Promise<T>,
+export const retryBusy = <T, U extends RimrafAsyncOptions>(
+  fn: (path: string, opt: U) => Promise<T>,
   extraCodes?: Set<string>,
 ) => {
-  const method = async (
-    path: string,
-    opt: RimrafAsyncOptions,
-    backoff = 1,
-    total = 0,
-  ) => {
+  const method = async (path: string, opt: U, backoff = 1, total = 0) => {
     const mbo = opt.maxBackoff || MAXBACKOFF
     const rate = opt.backoff || RATE
     const max = opt.maxRetries || MAXRETRIES
     let retries = 0
     while (true) {
       try {
-        return await fn(path)
+        return await fn(path, opt)
       } catch (er) {
         if (
           isFsError(er) &&
@@ -66,16 +61,16 @@ export const retryBusy = <T>(
 }
 
 // just retries, no async so no backoff
-export const retryBusySync = <T>(
-  fn: (path: string) => T,
+export const retryBusySync = <T, U extends RimrafSyncOptions>(
+  fn: (path: string, opt: U) => T,
   extraCodes?: Set<string>,
 ) => {
-  const method = (path: string, opt: RimrafOptions) => {
+  const method = (path: string, opt: U) => {
     const max = opt.maxRetries || MAXRETRIES
     let retries = 0
     while (true) {
       try {
-        return fn(path)
+        return fn(path, opt)
       } catch (er) {
         if (
           isFsError(er) &&
