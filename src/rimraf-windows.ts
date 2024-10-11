@@ -20,7 +20,7 @@ import { rimrafMoveRemove, rimrafMoveRemoveSync } from './rimraf-move-remove.js'
 import { errorCode } from './error.js'
 const { unlink, rmdir, lstat } = promises
 
-const createFallback =
+const rimrafFallbackToMoveRemove =
   (fn: (path: string, opt: RimrafAsyncOptions) => Promise<boolean | void>) =>
   async (path: string, opt: RimrafAsyncOptions) => {
     opt?.signal?.throwIfAborted()
@@ -35,7 +35,7 @@ const createFallback =
     }
   }
 
-const createFallbackSync =
+const rimrafFallbackToMoveRemoveSync =
   (fn: (path: string, opt: RimrafSyncOptions) => boolean | void) =>
   (path: string, opt: RimrafSyncOptions) => {
     opt?.signal?.throwIfAborted()
@@ -52,18 +52,18 @@ const createFallbackSync =
 
 const rimrafWindowsFile = retryBusy(fixEPERM(unlink))
 const rimrafWindowsFileSync = retryBusySync(fixEPERMSync(unlinkSync))
-const rimrafWindowsDirMoveRemoveFallback = createFallback(
+const rimrafWindowsDirMoveRemoveFallback = rimrafFallbackToMoveRemove(
   retryBusy(fixEPERM(rmdir)),
 )
-const rimrafWindowsDirMoveRemoveFallbackSync = createFallbackSync(
+const rimrafWindowsDirMoveRemoveFallbackSync = rimrafFallbackToMoveRemoveSync(
   retryBusySync(fixEPERMSync(rmdirSync)),
 )
 
-export const rimrafWindows = createFallback((path, opt) =>
+export const rimrafWindows = rimrafFallbackToMoveRemove((path, opt) =>
   ignoreENOENT(lstat(path).then(stat => rimrafWindowsDir(path, opt, stat))),
 )
 
-export const rimrafWindowsSync = createFallbackSync((path, opt) =>
+export const rimrafWindowsSync = rimrafFallbackToMoveRemoveSync((path, opt) =>
   ignoreENOENTSync(() => rimrafWindowsDirSync(path, opt, lstatSync(path))),
 )
 

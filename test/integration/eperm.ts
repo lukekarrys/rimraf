@@ -13,7 +13,9 @@ const arrSame = (arr1: string[], arr2: string[]) => {
 
 const setup = (t: Test) => {
   const [iterations, depth, fileCount, fileKb] =
-    process.env.CI ? [20_000, 15, 7, 100] : [200, 8, 3, 10]
+    process.env.CI && process.platform === 'win32' ?
+      [20_000, 15, 7, 100]
+    : [200, 8, 3, 10]
 
   const dir = t.testdir()
 

@@ -76,7 +76,7 @@ jobs:
         run: npm install
 
       - name: Run Tests
-        run: npm test -- -t0 -c
+        run: npm test
         env:
           RIMRAF_TEST_START_CHAR: a
           RIMRAF_TEST_END_CHAR: f

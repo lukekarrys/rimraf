@@ -21,6 +21,7 @@ t.throws(() => oa('hello'))
 t.throws(() => oa({ maxRetries: 'banana' }))
 
 t.test('every kind of invalid option value', t => {
+  const res = []
   // skip them when it's undefined, and skip the case
   // where they're all undefined, otherwise try every
   // possible combination of the values here.
@@ -43,7 +44,7 @@ t.test('every kind of invalid option value', t => {
               ) {
                 continue
               }
-              t.throws(() =>
+              try {
                 oa({
                   //@ts-expect-error
                   preserveRoot,
@@ -57,21 +58,28 @@ t.test('every kind of invalid option value', t => {
                   maxBackoff,
                   //@ts-expect-error
                   tmp,
-                }),
-              )
+                })
+              } catch (e) {
+                res.push(e)
+              }
             }
           }
         }
       }
     }
   }
+  t.equal(
+    res.length,
+    Math.pow(badNum.length, 4) * badStr.length * badBool.length - 1,
+  )
   t.end()
 })
 
 t.test('test every allowed combination', t => {
-  const goodBool = [undefined, true, false]
+  const res = []
   // note that a few of these actually aren't *valid*,
   // but it's verifying what the initial opt checker does.
+  const goodBool = [undefined, true, false]
   const goodNum = [undefined, 1, Math.pow(2, 32), -1]
   const goodStr = [undefined, 'hi']
   for (const preserveRoot of goodBool) {
@@ -80,7 +88,7 @@ t.test('test every allowed combination', t => {
         for (const retryDelay of goodNum) {
           for (const backoff of goodNum) {
             for (const maxBackoff of goodNum) {
-              t.ok(
+              res.push(
                 oa({
                   preserveRoot,
                   maxRetries,
@@ -96,6 +104,10 @@ t.test('test every allowed combination', t => {
       }
     }
   }
+  t.equal(
+    res.length,
+    Math.pow(goodNum.length, 4) * goodStr.length * goodBool.length,
+  )
   t.end()
 })
 
