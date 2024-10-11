@@ -84,7 +84,11 @@ t.test('failing rejects promise', async t => {
   for (const [m, fn] of Object.entries(
     fs.promises as unknown as MockFsPromise,
   )) {
-    t.rejects(fn(), { message: 'oops' }, `got expected value for ${m}`)
+    t.rejects(
+      fn(),
+      { message: 'oops', stack: `at ${m}` },
+      `got expected value for ${m}`,
+    )
   }
 })
 

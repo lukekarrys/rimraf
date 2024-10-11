@@ -6,22 +6,22 @@ import { windows, windowsSync } from '../../src/index.js'
 import { randomBytes } from 'crypto'
 import assert from 'assert'
 
-const arrSame = (arr1: string[], arr2: string[]) => {
-  const s = (a: string[]) => [...a].sort().join(',')
-  return s(arr1) === s(arr2)
-}
+const arrSame = (arr1: string[], arr2: string[]) =>
+  [...arr1].sort().join(',') === [...arr2].sort().join(',')
 
 const setup = (t: Test) => {
   const [iterations, depth, fileCount, fileKb] =
     process.env.CI && process.platform === 'win32' ?
       [20_000, 15, 7, 100]
-    : [200, 8, 3, 10]
+    : [2000, 8, 3, 10]
 
+  t.plan(11)
   const dir = t.testdir()
+  const readdir = () => readdirSync(dir)
 
   const letters = (length: number) =>
     Array.from({ length }).map((_, i) => (10 + i).toString(36))
-  const files = letters(fileCount).map(f => `file_${f}`)
+  const files = letters(fileCount).map(f => `__file_${f}`)
   const dirs = join(...letters(depth))
     .split(sep)
     .reduce<string[]>((acc, d) => acc.concat(join(acc.at(-1) ?? '', d)), [])
@@ -30,6 +30,7 @@ const setup = (t: Test) => {
     .map(d => join(dir, d))
 
   let iteration = 0
+
   return function* () {
     while (iteration !== iterations) {
       // use custom error to throw instead of using tap assertions to cut down
@@ -46,20 +47,22 @@ const setup = (t: Test) => {
         }
       }
 
-      const actual = readdirSync(dir)
-      assert(
-        !actual.length,
-        new RunError(`dir is not empty`, {
-          found: actual,
-        }),
-      )
+      const assertContents = (expected: boolean = false) => {
+        const found = readdir()
+        assert(
+          Boolean(found.length) === expected,
+          new RunError(`invalid dir contents`, { found, expected }),
+        )
+      }
 
+      assertContents()
       mkdirSync(join(dir, dirs.at(-1)!), { recursive: true })
       for (const d of dirs) {
         for (const f of files) {
           writeFileSync(join(dir, d, f), randomBytes(1024 * fileKb))
         }
       }
+      assertContents(true)
 
       // randomize results from glob so that when running Promise.all(rimraf)
       // on the result it will potentially delete parent directories before
@@ -78,15 +81,34 @@ const setup = (t: Test) => {
       )
 
       iteration += 1
-
-      yield [matches, RunError] as const
+      yield [
+        matches,
+        (error: unknown, path: string) =>
+          new RunError('rimraf error', { path, error }),
+        (result: [string, boolean][]) => {
+          assert(
+            result.length === dirs.length * (files.length + 1),
+            new RunError(`result is missing entries`, {
+              found: result,
+            }),
+          )
+          const notDeleted = result.filter(v => v[1] !== true)
+          assert(
+            notDeleted.length === 0,
+            new RunError(`some entries were not deleted`, {
+              found: notDeleted,
+            }),
+          )
+          assertContents()
+          if (iteration % (iterations / 10) === 0) {
+            t.ok(true, `${iteration}`)
+          }
+        },
+      ] as const
     }
 
-    return {
-      contents: readdirSync(dir),
-      iteration,
-      iterations,
-    }
+    t.equal(iteration, iterations, `ran all ${iteration} iterations`)
+    t.end()
   }
 }
 
@@ -100,74 +122,33 @@ t.test('windows does not throw EPERM', t => {
   }
 
   t.test('sync', t => {
-    let i
-    const r = setup(t)()
-    while ((i = r.next())) {
-      if (i.done) {
-        i = i.value
-        break
-      }
-
-      const [matches, RunError] = i.value
-      const result = matches
-        .map(path => {
+    for (const [matches, error, assertResult] of setup(t)()) {
+      assertResult(
+        matches.map(path => {
           try {
-            return {
-              path,
-              deleted: windowsSync(path),
-            }
-          } catch (error) {
-            throw new RunError('rimraf error', { error, path })
+            return [path, windowsSync(path)]
+          } catch (er) {
+            throw error(er, path)
           }
-        })
-        .filter(({ deleted }) => deleted !== true)
-      assert(
-        !result.length,
-        new RunError(`some entries were not deleted`, {
-          found: result,
         }),
       )
     }
-
-    t.strictSame(i.contents, [])
-    t.equal(i.iteration, i.iterations, `ran all ${i.iteration} iterations`)
-    t.end()
   })
 
   t.test('async', async t => {
-    let i
-    const r = setup(t)()
-    while ((i = r.next())) {
-      if (i.done) {
-        i = i.value
-        break
-      }
-
-      const [matches, RunError] = i.value
-      const result = (
+    for (const [matches, error, assertResult] of setup(t)()) {
+      assertResult(
         await Promise.all(
           matches.map(async path => {
             try {
-              return {
-                path,
-                deleted: await windows(path),
-              }
-            } catch (error) {
-              throw new RunError('rimraf error', { error, path })
+              return [path, await windows(path)]
+            } catch (er) {
+              throw error(er, path)
             }
           }),
-        )
-      ).filter(({ deleted }) => deleted !== true)
-      assert(
-        !result.length,
-        new RunError(`some entries were not deleted`, {
-          found: result,
-        }),
+        ),
       )
     }
-
-    t.strictSame(i.contents, [])
-    t.equal(i.iteration, i.iterations, `ran all ${i.iteration} iterations`)
   })
 
   t.end()
