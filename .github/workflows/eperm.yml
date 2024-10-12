@@ -1,10 +1,10 @@
-name: CI
+name: EPERM
 
 on:
   workflow_dispatch:
     inputs:
       iterations:
-        default: '20000'
+        description: How many iterations to run
 
 jobs:
   test:
@@ -26,6 +26,6 @@ jobs:
         run: npm install
 
       - name: Run Tests
-        run: npm test -- test/integration/eperm.ts
+        run: npm test -- test/integration/windows-eperm.ts --disable-coverage
         env:
           RIMRAF_TEST_EPERM_ITERATIONS: ${{ inputs.iterations }}

@@ -717,48 +717,56 @@ t.test('do not follow symlinks', t => {
   t.end()
 })
 
-t.test('retry more on windows', async t => {
-  t.intercept(process, 'platform', { value: 'win32' })
-  const fs = await import('../src/fs.js')
-  const asyncCalls: string[] = []
-  const syncCalls: string[] = []
-  const { rimrafMoveRemove, rimrafMoveRemoveSync } = (await t.mockImport(
-    '../src/rimraf-move-remove.js',
-    {
-      '../src/fs.js': t.createMock(fs, {
-        lstatSync: (path: string) => {
-          syncCalls.push(path)
-          throw Object.assign(new Error('cannot lstat'), {
-            path,
-            code: 'EPERM',
-          })
-        },
-        promises: {
-          lstat: async (path: string) => {
-            asyncCalls.push(path)
-            throw Object.assign(new Error('cannot lstat'), {
-              path,
-              code: 'EPERM',
-            })
-          },
-        },
-      }),
-    },
-  )) as typeof import('../src/rimraf-move-remove.js')
+t.test('retry is different on different platforms', async t => {
+  for (const [platform, syncLength, asyncLength] of [
+    ['win32', 11, 24],
+    ['posix', 1, 1],
+  ] as const) {
+    t.test(platform, async t => {
+      t.intercept(process, 'platform', { value: platform })
 
-  t.test('sync', t => {
-    // nest it so that we clean up the mess
-    const path = t.testdir({ test: fixture }) + '/test'
-    t.throws(() => rimrafMoveRemoveSync(path, {}), { code: 'EPERM' })
-    t.equal(syncCalls.length, 11)
-    t.end()
-  })
-  t.test('async', async t => {
-    // nest it so that we clean up the mess
-    const path = t.testdir({ test: fixture }) + '/test'
-    await t.rejects(rimrafMoveRemove(path, {}), { code: 'EPERM' })
-    t.equal(asyncCalls.length, 24)
-    t.end()
-  })
-  t.end()
+      const fs = await import('../src/fs.js')
+      const asyncCalls: string[] = []
+      const syncCalls: string[] = []
+      const { rimrafMoveRemove, rimrafMoveRemoveSync } = (await t.mockImport(
+        '../src/rimraf-move-remove.js',
+        {
+          '../src/fs.js': t.createMock(fs, {
+            lstatSync: (path: string) => {
+              syncCalls.push(path)
+              throw Object.assign(new Error('cannot lstat'), {
+                path,
+                code: 'EPERM',
+              })
+            },
+            promises: {
+              lstat: async (path: string) => {
+                asyncCalls.push(path)
+                throw Object.assign(new Error('cannot lstat'), {
+                  path,
+                  code: 'EPERM',
+                })
+              },
+            },
+          }),
+        },
+      )) as typeof import('../src/rimraf-move-remove.js')
+
+      t.test('sync', t => {
+        // nest it so that we clean up the mess
+        const path = t.testdir({ test: fixture }) + '/test'
+        t.throws(() => rimrafMoveRemoveSync(path, {}), { code: 'EPERM' })
+        t.equal(syncCalls.length, syncLength)
+        t.end()
+      })
+      t.test('async', async t => {
+        // nest it so that we clean up the mess
+        const path = t.testdir({ test: fixture }) + '/test'
+        await t.rejects(rimrafMoveRemove(path, {}), { code: 'EPERM' })
+        t.equal(asyncCalls.length, asyncLength)
+        t.end()
+      })
+      t.end()
+    })
+  }
 })
