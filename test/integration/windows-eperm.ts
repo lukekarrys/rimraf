@@ -1,9 +1,9 @@
 import t, { Test } from 'tap'
-import { mkdirSync, readdirSync, writeFileSync } from 'fs'
-import { sep, join } from 'path'
+import { readdirSync } from 'fs'
+import { join } from 'path'
 import { globSync } from 'glob'
-import { randomBytes } from 'crypto'
 import assert from 'assert'
+import { create } from '../fixtures/create-files.js'
 
 const isWinCI = process.env.CI && process.platform === 'win32'
 
@@ -16,10 +16,8 @@ const mockWindows = async (t: Test) => {
     rimrafSync: (path: string) => rimrafWindowsSync(path, {}),
   }
 }
+
 const setup = (t: Test) => {
-  const depth = 10
-  const fileCount = 7
-  const fileKb = 100
   const iterations =
     process.env?.RIMRAF_TEST_EPERM_ITERATIONS ?
       +process.env.RIMRAF_TEST_EPERM_ITERATIONS
@@ -29,19 +27,9 @@ const setup = (t: Test) => {
   const dir = t.testdir()
   const readdir = () => readdirSync(dir)
 
-  const letters = (length: number) =>
-    Array.from({ length }).map((_, i) => (10 + i).toString(36))
-  const files = letters(fileCount).map(f => `_file_${f}`)
-  const dirs = join(...letters(depth))
-    .split(sep)
-    .reduce<string[]>((acc, d) => acc.concat(join(acc.at(-1) ?? '', d)), [])
-  const entries = dirs
-    .flatMap(d => [d, ...files.map(f => join(d, f))])
-    .map(d => join(dir, d))
-
   let iteration = 0
-  let previous = Date.now()
   const start = Date.now()
+  let previous = start
 
   return function* () {
     while (iteration !== iterations) {
@@ -68,12 +56,7 @@ const setup = (t: Test) => {
       }
 
       assertContents()
-      mkdirSync(join(dir, dirs.at(-1)!), { recursive: true })
-      for (const d of dirs) {
-        for (const f of files) {
-          writeFileSync(join(dir, d, f), randomBytes(1024 * fileKb))
-        }
-      }
+      const entries = create(dir)
       assertContents(true)
 
       // randomize results from glob so that when running Promise.all(rimraf)
@@ -87,8 +70,8 @@ const setup = (t: Test) => {
       assert(
         [...matches].sort().join() === [...entries].sort().join(),
         new RunError(`glob result does not match expected`, {
-          found: matches,
-          wanted: entries,
+          found: matches.length,
+          wanted: entries.length,
         }),
       )
 
@@ -99,14 +82,15 @@ const setup = (t: Test) => {
           new RunError('rimraf error', { path, error }),
         assertResult: (result: [string, boolean][]) => {
           assert(
-            result.length === dirs.length * (files.length + 1),
+            result.length === entries.length,
             new RunError(`result is missing entries`, {
-              found: result,
+              found: result.length,
+              wanted: entries.length,
             }),
           )
           const notDeleted = result.filter(v => v[1] !== true)
           assert(
-            notDeleted.length === 0,
+            !notDeleted.length,
             new RunError(`some entries were not deleted`, {
               found: notDeleted,
             }),
